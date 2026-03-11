@@ -1,0 +1,464 @@
+# Snapshot test corpus for kloc-intelligence
+# Covers all 8 commands with the context-final test dataset (1154 nodes, 2697 edges)
+#
+# Commands: context, resolve, usages, deps, owners, inherit, overrides
+# Dataset: artifacts/kloc-dev/context-final/sot.json
+
+sot_id: context-final
+sot_path: artifacts/kloc-dev/context-final/sot.json
+
+queries:
+  # ============================================================
+  # CONTEXT COMMAND - 42 cases (from tests/cases.json)
+  # These have golden output in tests/snapshot-1802262244.json
+  # ============================================================
+
+  # --- Classes ---
+  - id: class-order-d1
+    command: context
+    symbol: "App\\Entity\\Order"
+    depth: 1
+    impl: false
+    category: class
+    has_golden: true
+
+  - id: class-order-d3
+    command: context
+    symbol: "App\\Entity\\Order"
+    depth: 3
+    impl: false
+    category: class
+    has_golden: true
+
+  - id: class-order-service-d2
+    command: context
+    symbol: "App\\Service\\OrderService"
+    depth: 2
+    impl: false
+    category: class
+    has_golden: true
+
+  - id: class-order-output-d2
+    command: context
+    symbol: "App\\Dto\\OrderOutput"
+    depth: 2
+    impl: false
+    category: class
+    has_golden: true
+
+  - id: class-customer-d2
+    command: context
+    symbol: "App\\Entity\\Customer"
+    depth: 2
+    impl: false
+    category: class
+    has_golden: true
+
+  - id: class-address-d2
+    command: context
+    symbol: "App\\Entity\\Address"
+    depth: 2
+    impl: false
+    category: class
+    has_golden: true
+
+  - id: class-abstract-processor-d2
+    command: context
+    symbol: "App\\Service\\AbstractOrderProcessor"
+    depth: 2
+    impl: false
+    category: class
+    has_golden: true
+
+  # --- Interfaces ---
+  - id: interface-order-repo-d2
+    command: context
+    symbol: "App\\Repository\\OrderRepositoryInterface"
+    depth: 2
+    impl: false
+    category: interface
+    has_golden: true
+
+  - id: interface-order-repo-d2-impl
+    command: context
+    symbol: "App\\Repository\\OrderRepositoryInterface"
+    depth: 2
+    impl: true
+    category: interface
+    has_golden: true
+
+  - id: interface-customer-repo-d2
+    command: context
+    symbol: "App\\Repository\\CustomerRepositoryInterface"
+    depth: 2
+    impl: false
+    category: interface
+    has_golden: true
+
+  - id: interface-email-sender-d2
+    command: context
+    symbol: "App\\Component\\EmailSenderInterface"
+    depth: 2
+    impl: false
+    category: interface
+    has_golden: true
+
+  - id: interface-email-sender-d2-impl
+    command: context
+    symbol: "App\\Component\\EmailSenderInterface"
+    depth: 2
+    impl: true
+    category: interface
+    has_golden: true
+
+  - id: interface-order-processor-d2
+    command: context
+    symbol: "App\\Component\\OrderProcessorInterface"
+    depth: 2
+    impl: false
+    category: interface
+    has_golden: true
+
+  - id: interface-inventory-checker-d1
+    command: context
+    symbol: "App\\Component\\InventoryCheckerInterface"
+    depth: 1
+    impl: false
+    category: interface
+    has_golden: true
+
+  - id: interface-base-repo-d2-impl
+    command: context
+    symbol: "App\\Repository\\BaseRepositoryInterface"
+    depth: 2
+    impl: true
+    category: interface
+    has_golden: true
+
+  # --- Methods ---
+  - id: method-order-construct-d2
+    command: context
+    symbol: "App\\Entity\\Order::__construct()"
+    depth: 2
+    impl: false
+    category: method
+    has_golden: true
+
+  - id: method-create-order-d3
+    command: context
+    symbol: "App\\Service\\OrderService::createOrder()"
+    depth: 3
+    impl: false
+    category: method
+    has_golden: true
+
+  - id: method-create-order-d5
+    command: context
+    symbol: "App\\Service\\OrderService::createOrder()"
+    depth: 5
+    impl: false
+    category: method
+    has_golden: true
+
+  - id: method-get-order-d3
+    command: context
+    symbol: "App\\Service\\OrderService::getOrder()"
+    depth: 3
+    impl: false
+    category: method
+    has_golden: true
+
+  - id: method-repo-save-d2
+    command: context
+    symbol: "App\\Repository\\OrderRepositoryInterface::save()"
+    depth: 2
+    impl: false
+    category: method
+    has_golden: true
+
+  - id: method-repo-save-d2-impl
+    command: context
+    symbol: "App\\Repository\\OrderRepositoryInterface::save()"
+    depth: 2
+    impl: true
+    category: method
+    has_golden: true
+
+  - id: method-repo-find-d3
+    command: context
+    symbol: "App\\Repository\\OrderRepositoryInterface::findById()"
+    depth: 3
+    impl: false
+    category: method
+    has_golden: true
+
+  - id: method-process-d2
+    command: context
+    symbol: "App\\Service\\AbstractOrderProcessor::process()"
+    depth: 2
+    impl: false
+    category: method
+    has_golden: true
+
+  - id: method-email-send-d2
+    command: context
+    symbol: "App\\Component\\EmailSenderInterface::send()"
+    depth: 2
+    impl: false
+    category: method
+    has_golden: true
+
+  - id: method-get-customer-d3
+    command: context
+    symbol: "App\\Service\\CustomerService::getCustomerById()"
+    depth: 3
+    impl: false
+    category: method
+    has_golden: true
+
+  - id: method-get-full-address-d2
+    command: context
+    symbol: "App\\Entity\\Address::getFullAddress()"
+    depth: 2
+    impl: false
+    category: method
+    has_golden: true
+
+  # --- Properties ---
+  - id: prop-order-id-d2
+    command: context
+    symbol: "App\\Entity\\Order::$id"
+    depth: 2
+    impl: false
+    category: property
+    has_golden: true
+
+  - id: prop-order-id-d4
+    command: context
+    symbol: "App\\Entity\\Order::$id"
+    depth: 4
+    impl: false
+    category: property
+    has_golden: true
+
+  - id: prop-order-email-d2
+    command: context
+    symbol: "App\\Entity\\Order::$customerEmail"
+    depth: 2
+    impl: false
+    category: property
+    has_golden: true
+
+  - id: prop-order-status-d2
+    command: context
+    symbol: "App\\Entity\\Order::$status"
+    depth: 2
+    impl: false
+    category: property
+    has_golden: true
+
+  - id: prop-customer-contact-d3
+    command: context
+    symbol: "App\\Entity\\Customer::$contact"
+    depth: 3
+    impl: false
+    category: property
+    has_golden: true
+
+  - id: prop-customer-address-d3
+    command: context
+    symbol: "App\\Entity\\Customer::$address"
+    depth: 3
+    impl: false
+    category: property
+    has_golden: true
+
+  - id: prop-service-order-repo-d2
+    command: context
+    symbol: "App\\Service\\OrderService::$orderRepository"
+    depth: 2
+    impl: false
+    category: property
+    has_golden: true
+
+  - id: prop-address-street-d2
+    command: context
+    symbol: "App\\Entity\\Address::$street"
+    depth: 2
+    impl: false
+    category: property
+    has_golden: true
+
+  - id: prop-contact-email-d2
+    command: context
+    symbol: "App\\Entity\\Contact::$email"
+    depth: 2
+    impl: false
+    category: property
+    has_golden: true
+
+  # --- Values (params) ---
+  - id: val-param-save-order-d2
+    command: context
+    symbol: "App\\Repository\\AuditableOrderRepository::save().$order"
+    depth: 2
+    impl: false
+    category: value-param
+    has_golden: true
+
+  - id: val-param-create-input-d2
+    command: context
+    symbol: "App\\Service\\OrderService::createOrder().$input"
+    depth: 2
+    impl: false
+    category: value-param
+    has_golden: true
+
+  - id: val-param-process-order-d2
+    command: context
+    symbol: "App\\Service\\AbstractOrderProcessor::process().$order"
+    depth: 2
+    impl: false
+    category: value-param
+    has_golden: true
+
+  - id: val-param-controller-request-d2
+    command: context
+    symbol: "App\\Ui\\Rest\\Controller\\OrderController::create().$request"
+    depth: 2
+    impl: false
+    category: value-param
+    has_golden: true
+
+  # --- Values (locals) ---
+  - id: val-local-saved-order-d3
+    command: context
+    symbol: "App\\Service\\OrderService::createOrder().local$savedOrder@45"
+    depth: 3
+    impl: false
+    category: value-local
+    has_golden: true
+
+  - id: val-local-order-d2
+    command: context
+    symbol: "App\\Service\\OrderService::getOrder().local$order@72"
+    depth: 2
+    impl: false
+    category: value-local
+    has_golden: true
+
+  - id: val-local-customer-d2
+    command: context
+    symbol: "App\\Service\\CustomerService::getCustomerById().local$customer@42"
+    depth: 2
+    impl: false
+    category: value-local
+    has_golden: true
+
+  # ============================================================
+  # RESOLVE COMMAND - 4 cases (no golden yet)
+  # ============================================================
+  - id: resolve-order-class
+    command: resolve
+    symbol: "App\\Entity\\Order"
+    has_golden: false
+
+  - id: resolve-order-service
+    command: resolve
+    symbol: "App\\Service\\OrderService"
+    has_golden: false
+
+  - id: resolve-order-repo-interface
+    command: resolve
+    symbol: "App\\Repository\\OrderRepositoryInterface"
+    has_golden: false
+
+  - id: resolve-create-order-method
+    command: resolve
+    symbol: "App\\Service\\OrderService::createOrder()"
+    has_golden: false
+
+  # ============================================================
+  # USAGES COMMAND - 3 cases (no golden yet)
+  # ============================================================
+  - id: usages-order-class
+    command: usages
+    symbol: "App\\Entity\\Order"
+    has_golden: false
+
+  - id: usages-email-sender-interface
+    command: usages
+    symbol: "App\\Component\\EmailSenderInterface"
+    has_golden: false
+
+  - id: usages-order-id-prop
+    command: usages
+    symbol: "App\\Entity\\Order::$id"
+    has_golden: false
+
+  # ============================================================
+  # DEPS COMMAND - 3 cases (no golden yet)
+  # ============================================================
+  - id: deps-order-service
+    command: deps
+    symbol: "App\\Service\\OrderService"
+    has_golden: false
+
+  - id: deps-order-controller
+    command: deps
+    symbol: "App\\Ui\\Rest\\Controller\\OrderController"
+    has_golden: false
+
+  - id: deps-notification-service
+    command: deps
+    symbol: "App\\Service\\NotificationService"
+    has_golden: false
+
+  # ============================================================
+  # OWNERS COMMAND - 2 cases (no golden yet)
+  # ============================================================
+  - id: owners-order-entity-file
+    command: owners
+    symbol: "src/Entity/Order.php"
+    has_golden: false
+
+  - id: owners-order-service-file
+    command: owners
+    symbol: "src/Service/OrderService.php"
+    has_golden: false
+
+  # ============================================================
+  # INHERIT COMMAND - 3 cases (no golden yet)
+  # ============================================================
+  - id: inherit-order-repo-interface
+    command: inherit
+    symbol: "App\\Repository\\OrderRepositoryInterface"
+    has_golden: false
+
+  - id: inherit-abstract-processor
+    command: inherit
+    symbol: "App\\Service\\AbstractOrderProcessor"
+    has_golden: false
+
+  - id: inherit-auditable-interface
+    command: inherit
+    symbol: "App\\Component\\AuditableInterface"
+    has_golden: false
+
+  # ============================================================
+  # OVERRIDES COMMAND - 3 cases (no golden yet)
+  # ============================================================
+  - id: overrides-logging-processor-do-process
+    command: overrides
+    symbol: "App\\Service\\LoggingOrderProcessor::doProcess()"
+    has_golden: false
+
+  - id: overrides-auditable-repo-save
+    command: overrides
+    symbol: "App\\Repository\\AuditableOrderRepository::save()"
+    has_golden: false
+
+  - id: overrides-email-sender-send
+    command: overrides
+    symbol: "App\\Component\\EmailSender::send()"
+    has_golden: false

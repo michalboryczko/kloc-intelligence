@@ -1,0 +1,8 @@
+services:
+  neo4j:
+    environment:
+      NEO4J_server_memory_heap_max__size: "1g"
+      NEO4J_server_memory_pagecache_size: "256m"
+    ports:
+      - "7474:7474"
+      - "7687:7687"
