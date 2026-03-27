@@ -1,7 +1,7 @@
 """Snapshot tests for kloc-intelligence context queries.
 
-Parametrized over the 42 context cases from tests/cases.json.
-Expected output is loaded from tests/snapshot-1802262244.json.
+Parametrized over the 48 context cases from tests/cases.json.
+Expected output is loaded from tests/snapshot-2103260323.json.
 
 The context orchestrator (T12) wires all sub-modules (T01-T11) together
 and execute_context_query() produces output matching kloc-cli exactly.
@@ -18,7 +18,7 @@ from tests.conftest import requires_neo4j
 # Paths relative to kloc monorepo root
 KLOC_ROOT = Path(__file__).parent.parent.parent
 CASES_PATH = KLOC_ROOT / "tests" / "cases.json"
-SNAPSHOT_PATH = KLOC_ROOT / "tests" / "snapshot-1802262244.json"
+SNAPSHOT_PATH = KLOC_ROOT / "tests" / "snapshot-2103260323.json"
 
 
 def load_cases() -> list[dict]:
