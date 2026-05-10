@@ -53,33 +53,43 @@ Reference code for argument/return types used by this method:
 
 EXPLAIN_FLOW_SYSTEM_PROMPT = """You are summarizing a Symfony application flow for semantic search by business process description.
 
-A flow is a HTTP route, message handler, event subscriber, or CLI command — an entry point that the framework wires up. Your output is an abstract description of the BUSINESS PROCESS this flow drives, not the implementation.
+A flow is a framework-level entry point: an HTTP route, a message handler, an event subscriber, or a CLI command. Your job is to describe (a) the SURFACE this flow exposes to the outside world, and (b) the BUSINESS PROCESS it drives.
 
-The output will be embedded for semantic search, so phrasings like "create an order", "process customer payments", "generate monthly reports", "notify users about failed deliveries" should match the corresponding flow.
+Output format — produce EXACTLY this structure, no markdown headers, no preamble:
 
-Rules:
-- 1-3 sentences. Concise.
-- Use BUSINESS vocabulary (orders, customers, payments, reports, notifications, inventory) — NOT implementation vocabulary (controllers, repositories, dispatchers, handlers).
-- Describe WHAT happens from a user/business perspective, not HOW the framework wires it.
-- Mention key downstream effects (events fired, messages dispatched) only if they're business-meaningful (e.g. "and notifies the customer", not "and dispatches NotifyCustomerEvent").
-- No code snippets, no class names, no method names in the output."""
+<Surface line — one of the patterns below, filled with the actual metadata>
+- HTTP: "API endpoint on path <route> method <HTTP method>"
+- Message: "Message handler for <short message class name>"
+- Event: "Event subscriber for <short event class name>"
+- CLI: "CLI command <command_name>"
 
-EXPLAIN_FLOW_TEMPLATE = """Summarize the business process driven by this flow.
+<blank line>
 
-Flow type:  {{ flow_type }}
-Flow name:  {{ flow_name }}
-{% if route %}Route:      {{ route }}{% endif %}
-{% if message_class %}Message:    {{ message_class }}{% endif %}
-{% if event_name %}Event:      {{ event_name }}{% endif %}
-{% if command_name %}Command:    {{ command_name }}{% endif %}
-Entry FQN:  {{ entry_fqn }}
+<Behavior — 2-3 sentences in business vocabulary describing what the flow accomplishes for the user or the business. Avoid implementation vocabulary (controller, repository, dispatcher, handler). Avoid class names and method names. Mention downstream side effects only if they're business-meaningful (e.g. "notifies the customer by email", not "dispatches NotifyCustomerEvent").>
 
-Entry method source:
+<Optional: one more line describing key downstream effects or related flows it kicks off, if relevant. Skip if there are no significant downstream effects.>
+
+The output will be embedded for semantic search. Phrasings like "create an order", "process customer payments", "generate monthly reports", "notify users about failed deliveries" should match the corresponding flow."""
+
+EXPLAIN_FLOW_TEMPLATE = """Summarize the flow below.
+
+=== Framework metadata ===
+Flow type:        {{ flow_type }}
+Flow name:        {{ flow_name }}
+{% if route %}HTTP route:       {{ route }}
+{% endif %}{% if http_methods %}HTTP methods:     {{ http_methods }}
+{% endif %}{% if message_class %}Message class:    {{ message_class }}
+{% endif %}{% if event_name %}Event class:      {{ event_name }}
+{% endif %}{% if command_name %}Command name:     {{ command_name }}
+{% endif %}Entry FQN:        {{ entry_fqn }}
+{% if entry_file %}Entry file:       {{ entry_file }}{% endif %}
+
+=== Entry method source ===
 ```php
 {{ entry_source }}
 ```
 {% if referenced_chunks %}
-Referenced code (callers, callees, type definitions, implementations — depth-3 walk):
+=== Referenced code (depth-3 context walk including implementations) ===
 {% for rc in referenced_chunks %}
 --- {{ rc.fqn }} ({{ rc.kind }}) ---
 ```php
@@ -354,7 +364,7 @@ def build_explain_flow_pipeline(config: AIConfig) -> Pipeline:
         api_key=Secret.from_token(config.llm.api_key),
         api_base_url=config.llm.api_url,
         model=config.llm.model,
-        generation_kwargs={"max_tokens": 384, "temperature": 0.3},
+        generation_kwargs={"max_tokens": 512, "temperature": 0.3},
     )
 
     pipeline.add_component("prompt_builder", prompt_builder)
@@ -370,9 +380,11 @@ def run_explain_flow(
     entry_fqn: str,
     entry_source: str,
     route: str = "",
+    http_methods: str = "",
     message_class: str = "",
     event_name: str = "",
     command_name: str = "",
+    entry_file: str = "",
     referenced_chunks: list[dict] | None = None,
 ) -> str:
     """Run flow explain pipeline. Returns the LLM text."""
@@ -382,9 +394,11 @@ def run_explain_flow(
         "entry_fqn": entry_fqn,
         "entry_source": entry_source,
         "route": route,
+        "http_methods": http_methods,
         "message_class": message_class,
         "event_name": event_name,
         "command_name": command_name,
+        "entry_file": entry_file,
         "referenced_chunks": referenced_chunks or [],
     }
     logger.debug(

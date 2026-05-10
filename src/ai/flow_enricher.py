@@ -128,6 +128,9 @@ class FlowEnricher:
 
         referenced = self._gather_context_chunks(method)
 
+        http_methods = flow.get("http_methods") or []
+        http_methods_str = ", ".join(http_methods) if http_methods else ""
+
         explanation = run_explain_flow(
             self._explain_pipeline,
             flow_type=flow["type"],
@@ -135,9 +138,11 @@ class FlowEnricher:
             entry_fqn=f"{flow.get('entry_fqn','')}::{flow.get('entry_method','')}".rstrip(":"),
             entry_source=entry_source[:MAX_REF_CHARS_PER_NODE * 4],
             route=flow.get("route", "") or "",
+            http_methods=http_methods_str,
             message_class=flow.get("message_class", "") or "",
             event_name=flow.get("event_name", "") or "",
             command_name=flow.get("command_name", "") or "",
+            entry_file=method.file or "",
             referenced_chunks=referenced,
         )
         if not explanation:
@@ -190,6 +195,7 @@ class FlowEnricher:
             "entry_method": record.get("entry_method", ""),
             "explanation": record.get("explanation"),
             "route": record.get("route"),
+            "http_methods": list(record.get("http_methods") or []),
             "message_class": record.get("message_class"),
             "event_name": record.get("event_name"),
             "command_name": record.get("command_name"),
