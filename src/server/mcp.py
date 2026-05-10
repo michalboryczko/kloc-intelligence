@@ -414,44 +414,6 @@ class MCPServer:
                 },
             },
             {
-                "name": "kloc_explain_flow",
-                "description": (
-                    "Get multi-type explanation for an architectural flow. "
-                    "Returns business process, technical architecture, search description, and labels."
-                ),
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "flow_id": {
-                            "type": "string",
-                            "description": "Flow ID or partial FQN match",
-                        },
-                        "force": {
-                            "type": "boolean",
-                            "description": "Regenerate explanations",
-                            "default": False,
-                        },
-                        "project": project_prop,
-                    },
-                    "required": ["flow_id"],
-                },
-            },
-            {
-                "name": "kloc_flow_diagram",
-                "description": "Get ASCII flow diagram showing execution path and dependencies.",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "flow_id": {
-                            "type": "string",
-                            "description": "Flow ID or partial FQN match",
-                        },
-                        "project": project_prop,
-                    },
-                    "required": ["flow_id"],
-                },
-            },
-            {
                 "name": "kloc_import_flows",
                 "description": "Import symfony-kloc.json flows into Neo4j.",
                 "inputSchema": {
@@ -533,8 +495,6 @@ class MCPServer:
             "kloc_explain": self._handle_explain,
             "kloc_search": self._handle_search,
             "kloc_enrich": self._handle_enrich,
-            "kloc_explain_flow": self._handle_explain_flow,
-            "kloc_flow_diagram": self._handle_flow_diagram,
             "kloc_import_flows": self._handle_import_flows,
             "kloc_source": self._handle_source,
             "kloc_chunks": self._handle_chunks,
@@ -746,76 +706,6 @@ class MCPServer:
             "nodes": len(nodes),
             "edges": len(edges),
         }
-
-    def _handle_explain_flow(self, args: dict) -> dict:
-        import json as json_mod
-        from ..ai.config import AIConfig
-        from ..ai.flow_enricher import FlowEnricher
-
-        project = args.get("project")
-        runner = self._get_runner(project)
-        flow_id = args["flow_id"]
-
-        # Try resolving partial match
-        rec = runner.execute_single(
-            "MATCH (f:Flow) WHERE f.flow_id = $q OR f.flow_id CONTAINS $q OR f.entry_fqn CONTAINS $q "
-            "RETURN f.flow_id AS fid LIMIT 1",
-            q=flow_id,
-        )
-        if not rec:
-            return {"error": f"Flow not found: {flow_id}"}
-        resolved_id = rec["fid"]
-
-        # Check existing
-        if not args.get("force", False):
-            existing = runner.execute_single(
-                "MATCH (f:Flow {flow_id: $fid}) RETURN f.explanation_business AS biz",
-                fid=resolved_id,
-            )
-            if existing and existing["biz"]:
-                full = runner.execute_single(
-                    """MATCH (f:Flow {flow_id: $fid})
-                       RETURN f.explanation_business AS biz, f.explanation_technical AS tech,
-                              f.explanation_search AS srch, f.labels AS labels,
-                              f.name AS name, f.type AS type""",
-                    fid=resolved_id,
-                )
-                return {
-                    "flow_id": resolved_id, "type": full["type"], "name": full["name"],
-                    "business": full["biz"], "technical": full["tech"],
-                    "search": full["srch"], "labels": json_mod.loads(full["labels"] or "[]"),
-                    "cached": True,
-                }
-
-        ai_config = AIConfig.from_env()
-        enricher = FlowEnricher(runner, ai_config)
-        return enricher.enrich_flow(resolved_id, force=True)
-
-    def _handle_flow_diagram(self, args: dict) -> dict:
-        from ..ai.config import AIConfig
-        from ..ai.source_reader import SourceReader
-        from ..ai.flow_diagram import FlowDiagramBuilder
-
-        project = args.get("project")
-        runner = self._get_runner(project)
-        flow_id = args["flow_id"]
-
-        rec = runner.execute_single(
-            "MATCH (f:Flow) WHERE f.flow_id = $q OR f.flow_id CONTAINS $q OR f.entry_fqn CONTAINS $q "
-            "RETURN f.flow_id AS fid LIMIT 1",
-            q=flow_id,
-        )
-        if not rec:
-            return {"error": f"Flow not found: {flow_id}"}
-
-        ai_config = AIConfig.from_env()
-        reader = SourceReader(ai_config.project_root)
-        builder = FlowDiagramBuilder(runner, reader)
-        info = builder.resolve_flow(rec["fid"])
-        if not info:
-            return {"error": f"Could not resolve flow: {rec['fid']}"}
-
-        return {"flow_id": rec["fid"], "diagram": builder.build_diagram(info)}
 
     def _handle_import_flows(self, args: dict) -> dict:
         from ..db.flow_importer import load_symfony_kloc, parse_flows, import_flow_nodes, import_flow_edges, clear_flows
