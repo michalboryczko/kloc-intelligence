@@ -368,7 +368,7 @@ class Enricher:
             """,
             node_id=node_id,
             explanation=explanation,
-            model=self._config.llm_model,
+            model=self._config.llm.model,
         )
 
     def _get_method_sources(self, class_node: NodeData) -> list[tuple[NodeData, str]]:

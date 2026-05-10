@@ -83,7 +83,7 @@ def _make_qdrant_store(config: AIConfig, collection: str) -> QdrantDocumentStore
     return QdrantDocumentStore(
         url=config.qdrant_url,
         index=collection,
-        embedding_dim=config.embedding_dimension,
+        embedding_dim=config.embedding.dimension,
         recreate_index=False,
         return_embedding=False,
         hnsw_config=None,
@@ -112,9 +112,9 @@ def build_explain_pipeline(config: AIConfig, kind: str = "Method") -> Pipeline:
     )
 
     generator = OpenAIChatGenerator(
-        api_key=Secret.from_token(config.openrouter_api_key),
-        api_base_url=config.openrouter_base_url,
-        model=config.llm_model,
+        api_key=Secret.from_token(config.llm.api_key),
+        api_base_url=config.llm.api_url,
+        model=config.llm.model,
         generation_kwargs={"max_tokens": 1024, "temperature": 0.3},
     )
 
@@ -211,9 +211,9 @@ def build_embed_pipeline(config: AIConfig, collection: str) -> Pipeline:
     pipeline = Pipeline()
 
     embedder = OpenAIDocumentEmbedder(
-        api_key=Secret.from_token(config.openrouter_api_key),
-        api_base_url=config.openrouter_base_url,
-        model=config.embedding_model,
+        api_key=Secret.from_token(config.embedding.api_key),
+        api_base_url=config.embedding.api_url,
+        model=config.embedding.model,
     )
 
     store = _make_qdrant_store(config, collection)
@@ -252,9 +252,9 @@ def build_search_pipeline(config: AIConfig, collection: str) -> Pipeline:
     pipeline = Pipeline()
 
     embedder = OpenAITextEmbedder(
-        api_key=Secret.from_token(config.openrouter_api_key),
-        api_base_url=config.openrouter_base_url,
-        model=config.embedding_model,
+        api_key=Secret.from_token(config.embedding.api_key),
+        api_base_url=config.embedding.api_url,
+        model=config.embedding.model,
     )
 
     store = _make_qdrant_store(config, collection)

@@ -7,7 +7,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-# Load .env file (doesn't override existing env vars like OPENROUTER_KEY from .zshrc)
+# Load .env file (doesn't override existing env vars like LLM_API_KEY from .zshrc)
 _env_file = Path(__file__).parent.parent / ".env"
 if _env_file.is_file():
     for line in _env_file.read_text().splitlines():
@@ -477,7 +477,7 @@ def explain(
             console.print(f"[red]{result['error']}[/red]")
             raise typer.Exit(1)
         explanation = result["explanation"]
-        model = ai_config.llm_model
+        model = ai_config.llm.model
 
     if output_json:
         out = {
@@ -495,7 +495,7 @@ def explain(
         console.print(f"\n[bold]Explanation for {node.fqn}[/bold] ({node.kind})")
         console.print(f"[dim]defined at: {node.file or '<unknown>'}{line_str}[/dim]\n")
         console.print(explanation)
-        console.print(f"\n[dim][{model} via OpenRouter][/dim]")
+        console.print(f"\n[dim][{model}][/dim]")
 
     conn.close()
 
@@ -515,9 +515,8 @@ def search(
     from .ai.pipelines import build_search_pipeline, run_search, search_both_collections
 
     ai_config = AIConfig.from_env()
-    errors = [e for e in ai_config.validate() if "PROJECT_ROOT" not in e]
-    if not ai_config.openrouter_api_key:
-        console.print("[red]OPENROUTER_KEY is required for search[/red]")
+    if not ai_config.embedding.api_key:
+        console.print("[red]EMBEDDING_API_KEY is required for search[/red]")
         raise typer.Exit(1)
 
     if collection == "both":
