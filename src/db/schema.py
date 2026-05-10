@@ -51,6 +51,9 @@ INDEXES = {
     "interface_fqn": "CREATE INDEX interface_fqn IF NOT EXISTS FOR (n:Interface) ON (n.fqn)",
     "value_kind": "CREATE INDEX value_kind IF NOT EXISTS FOR (n:Value) ON (n.kind)",
     "call_kind": "CREATE INDEX call_kind IF NOT EXISTS FOR (n:Call) ON (n.kind)",
+    "node_explanation": "CREATE INDEX node_explanation IF NOT EXISTS FOR (n:Node) ON (n.explanation)",
+    "flow_id": "CREATE INDEX flow_id IF NOT EXISTS FOR (n:Flow) ON (n.flow_id)",
+    "flow_type": "CREATE INDEX flow_type IF NOT EXISTS FOR (n:Flow) ON (n.type)",
 }
 
 
