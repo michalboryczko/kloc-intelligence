@@ -415,7 +415,11 @@ class MCPServer:
             },
             {
                 "name": "kloc_import_flows",
-                "description": "Import symfony-kloc.json flows into Neo4j.",
+                "description": (
+                    "Import symfony-kloc.json flows into Neo4j as :Flow nodes "
+                    "with FLOW_ENTRY and FLOW_TRIGGERS edges. "
+                    "Replaces all existing flows on each call."
+                ),
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -708,6 +712,7 @@ class MCPServer:
         }
 
     def _handle_import_flows(self, args: dict) -> dict:
+        import os
         from ..db.flow_importer import load_symfony_kloc, parse_flows, import_flow_nodes, import_flow_edges, clear_flows
         from ..db.schema import ensure_schema
 
@@ -718,11 +723,37 @@ class MCPServer:
         ensure_schema(conn)
         data = load_symfony_kloc(args["path"])
         nodes, edges = parse_flows(data)
+        entry_count = sum(1 for e in edges if e["type"] == "flow_entry")
+        trigger_count = sum(1 for e in edges if e["type"] == "flow_triggers")
+
+        try:
+            from qdrant_client import QdrantClient
+            qdrant_url = os.environ.get("QDRANT_URL", "http://localhost:6333")
+            qdrant_api_key = os.environ.get("QDRANT_API_KEY") or None
+            qdrant = QdrantClient(url=qdrant_url, api_key=qdrant_api_key)
+            for name in (
+                "flow_business_embeddings",
+                "flow_technical_embeddings",
+                "flow_search_embeddings",
+            ):
+                try:
+                    qdrant.delete_collection(name)
+                except Exception:
+                    pass
+            qdrant.close()
+        except Exception:
+            pass
+
         clear_flows(conn)
         import_flow_nodes(conn, nodes)
         import_flow_edges(conn, edges)
 
-        return {"status": "ok", "flows": len(nodes), "edges": len(edges)}
+        return {
+            "status": "ok",
+            "flows": len(nodes),
+            "flow_entry_edges": entry_count,
+            "flow_triggers_edges": trigger_count,
+        }
 
     def _resolve_project_root(self, args: dict) -> str:
         from ..ai.config import AIConfig
