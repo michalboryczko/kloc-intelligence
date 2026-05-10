@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "kloc-intelligence": {
+      "command": "uv",
+      "args": [
+        "--directory",
+        "${CLAUDE_PLUGIN_ROOT}/../../..",
+        "run",
+        "kloc-intelligence",
+        "mcp-server"
+      ]
+    }
+  }
+}

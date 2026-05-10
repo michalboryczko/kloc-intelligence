@@ -1,0 +1,6 @@
+{
+  "name": "kloc-intelligence",
+  "version": "0.1.0",
+  "description": "Graph-native code intelligence for PHP — structural traversal, flow analysis, semantic search, and AI enrichment, exposed through an MCP server plus six task-oriented skills.",
+  "homepage": "https://github.com/michalboryczko/kloc-intelligence"
+}

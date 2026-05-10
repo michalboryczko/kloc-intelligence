@@ -24,6 +24,7 @@ coverage.xml
 .idea/
 .vscode/
 
-# Claude/AI working files
-.claude/
+# Claude/AI working files — exclude everything except the checked-in plugin
+.claude/*
+!.claude/plugins/
 docs/specs/
