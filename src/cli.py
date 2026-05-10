@@ -674,7 +674,6 @@ def enrich_status(
 @app.command("import-flows")
 def import_flows(
     path: str = typer.Argument(..., help="Path to symfony-kloc.json"),
-    clear: bool = typer.Option(True, help="Clear existing flows before import"),
 ):
     """Import symfony-kloc.json flows into Neo4j as :Flow nodes with FLOW_ENTRY and FLOW_TRIGGERS edges.
 
@@ -724,9 +723,8 @@ def import_flows(
     except Exception as exc:
         console.print(f"[yellow]Skipping Qdrant flow_* cleanup: {exc}[/yellow]")
 
-    if clear:
-        console.print("Clearing existing flows...")
-        clear_flows(conn)
+    console.print("Clearing existing flows...")
+    clear_flows(conn)
 
     console.print("Importing flow nodes...")
     import_flow_nodes(conn, nodes)
