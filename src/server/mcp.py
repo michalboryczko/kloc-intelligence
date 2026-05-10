@@ -433,6 +433,30 @@ class MCPServer:
                 },
             },
             {
+                "name": "kloc_flows",
+                "description": (
+                    "List or inspect Symfony application flows (HTTP/message/event/CLI). "
+                    "Without flow_id, returns the list (optionally filtered by type). "
+                    "With flow_id, returns full detail with triggers in/out. "
+                    "If flow_id partially matches multiple flows, returns candidates."
+                ),
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "flow_id": {
+                            "type": "string",
+                            "description": "Exact flow_id, partial match, or entry FQN. Omit to list all flows.",
+                        },
+                        "type": {
+                            "type": "string",
+                            "description": "Filter list by type (http, message, event, cli). Comma-separated for multi-filter. Ignored when flow_id is given.",
+                        },
+                        "project": project_prop,
+                    },
+                    "required": [],
+                },
+            },
+            {
                 "name": "kloc_source",
                 "description": (
                     "Read raw PHP source code for a node, using its file + enclosing line range. "
@@ -500,6 +524,7 @@ class MCPServer:
             "kloc_search": self._handle_search,
             "kloc_enrich": self._handle_enrich,
             "kloc_import_flows": self._handle_import_flows,
+            "kloc_flows": self._handle_flows,
             "kloc_source": self._handle_source,
             "kloc_chunks": self._handle_chunks,
         }
@@ -754,6 +779,56 @@ class MCPServer:
             "flow_entry_edges": entry_count,
             "flow_triggers_edges": trigger_count,
         }
+
+    def _handle_flows(self, args: dict) -> dict:
+        from ..db.queries.flows import (
+            VALID_FLOW_TYPES,
+            list_flows,
+            find_flow,
+            get_flow_detail,
+        )
+
+        project = args.get("project")
+        runner = self._get_runner(project)
+        conn = runner._connection
+
+        flow_id = args.get("flow_id")
+        type_filter_raw = args.get("type")
+
+        if flow_id:
+            candidates = find_flow(conn, flow_id)
+            if not candidates:
+                return {"mode": "candidates", "candidates": []}
+            if len(candidates) == 1:
+                detail = get_flow_detail(conn, candidates[0]["flow_id"])
+                return {"mode": "detail", "flow": detail}
+            return {
+                "mode": "candidates",
+                "candidates": [
+                    {
+                        "flow_id": c["flow_id"],
+                        "type": c["type"],
+                        "name": c["name"],
+                        "entry_fqn": c["entry_fqn"],
+                    }
+                    for c in candidates
+                ],
+            }
+
+        types: list[str] | None = None
+        if type_filter_raw:
+            requested = [t.strip() for t in type_filter_raw.split(",") if t.strip()]
+            unknown = [t for t in requested if t not in VALID_FLOW_TYPES]
+            if unknown:
+                return {
+                    "error": (
+                        f"Unknown flow type(s): {', '.join(unknown)}. "
+                        f"Allowed: {', '.join(sorted(VALID_FLOW_TYPES))}."
+                    )
+                }
+            types = requested
+
+        return {"mode": "list", "flows": list_flows(conn, type_filter=types)}
 
     def _resolve_project_root(self, args: dict) -> str:
         from ..ai.config import AIConfig

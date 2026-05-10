@@ -740,6 +740,126 @@ def import_flows(
 
 
 @app.command()
+def flows(
+    query: str = typer.Argument(None, help="Optional flow_id, partial match, or entry FQN"),
+    type_filter: str = typer.Option(None, "--type", "-t", help="Filter by type: http,message,event,cli (comma-separated)"),
+    output_json: bool = typer.Option(False, "--json", "-j", help="Output as JSON"),
+):
+    """List or inspect application flows.
+
+    No argument lists all flows (filter with --type).
+    With an argument, returns full detail for an exact flow_id, or a candidate list
+    when the query partially matches multiple flows.
+    """
+    import json as json_mod
+    from .config import Neo4jConfig
+    from .db.connection import Neo4jConnection
+    from .db.queries.flows import (
+        VALID_FLOW_TYPES,
+        list_flows,
+        find_flow,
+        get_flow_detail,
+    )
+
+    config = Neo4jConfig.from_env()
+    conn = Neo4jConnection(config)
+    conn.verify_connectivity()
+
+    types: list[str] | None = None
+    if type_filter:
+        types = [t.strip() for t in type_filter.split(",") if t.strip()]
+        unknown = [t for t in types if t not in VALID_FLOW_TYPES]
+        if unknown:
+            console.print(
+                f"[red]Unknown flow type(s): {', '.join(unknown)}. "
+                f"Allowed: {', '.join(sorted(VALID_FLOW_TYPES))}.[/red]"
+            )
+            conn.close()
+            raise typer.Exit(1)
+
+    if query is None:
+        result = {"mode": "list", "flows": list_flows(conn, type_filter=types)}
+    else:
+        candidates = find_flow(conn, query)
+        if len(candidates) == 0:
+            result = {"mode": "candidates", "candidates": []}
+        elif len(candidates) == 1:
+            detail = get_flow_detail(conn, candidates[0]["flow_id"])
+            result = {"mode": "detail", "flow": detail}
+        else:
+            result = {
+                "mode": "candidates",
+                "candidates": [
+                    {
+                        "flow_id": c["flow_id"],
+                        "type": c["type"],
+                        "name": c["name"],
+                        "entry_fqn": c["entry_fqn"],
+                    }
+                    for c in candidates
+                ],
+            }
+
+    if output_json:
+        print(json_mod.dumps(result, indent=2))
+    elif result["mode"] == "list":
+        rows = result["flows"]
+        if not rows:
+            console.print("[yellow]No flows found.[/yellow]")
+        else:
+            table = Table(title=f"Flows ({len(rows)})")
+            table.add_column("Type", style="cyan")
+            table.add_column("Name", style="green")
+            table.add_column("Entry FQN", style="yellow")
+            table.add_column("Flow ID", style="dim")
+            for f in rows:
+                table.add_row(f["type"], f["name"], f["entry_fqn"], f["flow_id"])
+            console.print(table)
+    elif result["mode"] == "candidates":
+        cands = result["candidates"]
+        if not cands:
+            console.print(f"[yellow]No flows match '{query}'.[/yellow]")
+        else:
+            console.print(f"[bold]Multiple matches for '{query}':[/bold]")
+            table = Table()
+            table.add_column("Type", style="cyan")
+            table.add_column("Name", style="green")
+            table.add_column("Flow ID", style="dim")
+            for c in cands:
+                table.add_row(c["type"], c["name"], c["flow_id"])
+            console.print(table)
+    else:
+        flow = result["flow"]
+        console.print(f"\n[bold]{flow['name']}[/bold] ([cyan]{flow['type']}[/cyan])")
+        console.print(f"[dim]flow_id:[/dim] {flow['flow_id']}")
+        entry = flow["entry"]
+        loc = entry.get("file") or "<unknown>"
+        if entry.get("start_line") and entry.get("end_line"):
+            loc = f"{loc}:{entry['start_line']}-{entry['end_line']}"
+        console.print(f"[dim]entry:[/dim]   {entry['fqn']}  [dim]{loc}[/dim]")
+        if flow["type"] == "http":
+            console.print(f"[dim]route:[/dim]   {flow.get('route','')} {' '.join(flow.get('http_methods',[]))}")
+        elif flow["type"] == "message":
+            console.print(f"[dim]message:[/dim] {flow.get('message_class','')}")
+        elif flow["type"] == "event":
+            console.print(f"[dim]event:[/dim]   {flow.get('event_name','')}")
+        elif flow["type"] == "cli":
+            console.print(f"[dim]command:[/dim] {flow.get('command_name','')}")
+        if flow["triggers_out"]:
+            console.print(f"\n[bold]Triggers out ({len(flow['triggers_out'])}):[/bold]")
+            for t in flow["triggers_out"]:
+                console.print(f"  → [cyan]{t['trigger_type']}[/cyan] via [yellow]{t['via']}[/yellow] → {t['target_name']} [dim]({t['target_flow_id']})[/dim]")
+        if flow["triggers_in"]:
+            console.print(f"\n[bold]Triggers in ({len(flow['triggers_in'])}):[/bold]")
+            for t in flow["triggers_in"]:
+                console.print(f"  ← [cyan]{t['trigger_type']}[/cyan] via [yellow]{t['via']}[/yellow] ← {t['source_name']} [dim]({t['source_flow_id']})[/dim]")
+        if not flow["triggers_out"] and not flow["triggers_in"]:
+            console.print("\n[dim](no triggers)[/dim]")
+
+    conn.close()
+
+
+@app.command()
 def source(
     symbol: str = typer.Argument(..., help="Symbol to read source for"),
     project_root: str = typer.Option(None, "--project-root", "-r", help="Path to PHP project root"),
