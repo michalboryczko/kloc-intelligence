@@ -51,6 +51,44 @@ Reference code for argument/return types used by this method:
 {% endfor %}
 {% endif %}"""
 
+EXPLAIN_FLOW_SYSTEM_PROMPT = """You are summarizing a Symfony application flow for semantic search by business process description.
+
+A flow is a HTTP route, message handler, event subscriber, or CLI command — an entry point that the framework wires up. Your output is an abstract description of the BUSINESS PROCESS this flow drives, not the implementation.
+
+The output will be embedded for semantic search, so phrasings like "create an order", "process customer payments", "generate monthly reports", "notify users about failed deliveries" should match the corresponding flow.
+
+Rules:
+- 1-3 sentences. Concise.
+- Use BUSINESS vocabulary (orders, customers, payments, reports, notifications, inventory) — NOT implementation vocabulary (controllers, repositories, dispatchers, handlers).
+- Describe WHAT happens from a user/business perspective, not HOW the framework wires it.
+- Mention key downstream effects (events fired, messages dispatched) only if they're business-meaningful (e.g. "and notifies the customer", not "and dispatches NotifyCustomerEvent").
+- No code snippets, no class names, no method names in the output."""
+
+EXPLAIN_FLOW_TEMPLATE = """Summarize the business process driven by this flow.
+
+Flow type:  {{ flow_type }}
+Flow name:  {{ flow_name }}
+{% if route %}Route:      {{ route }}{% endif %}
+{% if message_class %}Message:    {{ message_class }}{% endif %}
+{% if event_name %}Event:      {{ event_name }}{% endif %}
+{% if command_name %}Command:    {{ command_name }}{% endif %}
+Entry FQN:  {{ entry_fqn }}
+
+Entry method source:
+```php
+{{ entry_source }}
+```
+{% if referenced_chunks %}
+Referenced code (callers, callees, type definitions, implementations — depth-3 walk):
+{% for rc in referenced_chunks %}
+--- {{ rc.fqn }} ({{ rc.kind }}) ---
+```php
+{{ rc.code }}
+```
+{% endfor %}
+{% endif %}"""
+
+
 EXPLAIN_CLASS_TEMPLATE = """Analyze this PHP class and describe what it does:
 
 FQN: {{ fqn }}
@@ -301,9 +339,70 @@ def run_search(
     ]
 
 
+def build_explain_flow_pipeline(config: AIConfig) -> Pipeline:
+    """Build pipeline that generates a business-level flow summary."""
+    pipeline = Pipeline()
+
+    prompt_builder = ChatPromptBuilder(
+        template=[
+            ChatMessage.from_system(EXPLAIN_FLOW_SYSTEM_PROMPT),
+            ChatMessage.from_user(EXPLAIN_FLOW_TEMPLATE),
+        ],
+        required_variables=["flow_type", "flow_name", "entry_fqn", "entry_source"],
+    )
+    generator = OpenAIChatGenerator(
+        api_key=Secret.from_token(config.llm.api_key),
+        api_base_url=config.llm.api_url,
+        model=config.llm.model,
+        generation_kwargs={"max_tokens": 384, "temperature": 0.3},
+    )
+
+    pipeline.add_component("prompt_builder", prompt_builder)
+    pipeline.add_component("generator", generator)
+    pipeline.connect("prompt_builder.prompt", "generator.messages")
+    return pipeline
+
+
+def run_explain_flow(
+    pipeline: Pipeline,
+    flow_type: str,
+    flow_name: str,
+    entry_fqn: str,
+    entry_source: str,
+    route: str = "",
+    message_class: str = "",
+    event_name: str = "",
+    command_name: str = "",
+    referenced_chunks: list[dict] | None = None,
+) -> str:
+    """Run flow explain pipeline. Returns the LLM text."""
+    variables = {
+        "flow_type": flow_type,
+        "flow_name": flow_name,
+        "entry_fqn": entry_fqn,
+        "entry_source": entry_source,
+        "route": route,
+        "message_class": message_class,
+        "event_name": event_name,
+        "command_name": command_name,
+        "referenced_chunks": referenced_chunks or [],
+    }
+    logger.debug(
+        "  LLM call: flow explain for %s (entry_source=%d chars, refs=%d)",
+        flow_name, len(entry_source), len(referenced_chunks or []),
+    )
+    _render_and_log_prompt(
+        [ChatMessage.from_system(EXPLAIN_FLOW_SYSTEM_PROMPT), ChatMessage.from_user(EXPLAIN_FLOW_TEMPLATE)],
+        variables,
+    )
+    result = pipeline.run({"prompt_builder": variables})
+    return _log_response(result)
+
+
 ALL_SEARCH_COLLECTIONS = [
     "code_embeddings",
     "explain_embeddings",
+    "flow_explain_embeddings",
 ]
 
 

@@ -622,6 +622,74 @@ def enrich(
     conn.close()
 
 
+@app.command("enrich-flows")
+def enrich_flows(
+    project_root: str = typer.Option(None, "--project-root", "-r", help="Path to PHP project root"),
+    force: bool = typer.Option(False, "--force", "-f", help="Re-enrich already enriched flows"),
+    debug: bool = typer.Option(False, "--debug", help="Enable debug logging"),
+):
+    """Generate business-process summaries for all :Flow nodes.
+
+    For each flow, walks the depth-3 bidirectional context (with implementations) of the
+    entry method, attaches source snippets from referenced nodes, and asks the LLM for a
+    1-3 sentence abstract description optimized for business-vocabulary search queries.
+    Stores the result on the :Flow node and embeds it into flow_explain_embeddings.
+    """
+    from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn
+
+    _require_ai_deps()
+    _setup_logging(debug)
+    from .ai.config import AIConfig
+    from .ai.flow_enricher import FlowEnricher
+    from .config import Neo4jConfig
+    from .db.connection import Neo4jConnection
+    from .db.query_runner import QueryRunner
+
+    neo4j_config = Neo4jConfig.from_env()
+    ai_config = AIConfig.from_env()
+    if project_root:
+        ai_config.project_root = project_root
+
+    errors = ai_config.validate()
+    if errors:
+        for e in errors:
+            console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1)
+
+    conn = Neo4jConnection(neo4j_config)
+    runner = QueryRunner(conn)
+    enricher = FlowEnricher(runner, ai_config)
+
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        TextColumn("{task.completed}/{task.total}"),
+        console=console,
+    ) as progress:
+        task = progress.add_task("Enriching flows...", total=0)
+
+        def on_progress(p):
+            progress.update(task, total=p.total, completed=p.processed + p.skipped + p.failed)
+            progress.update(
+                task,
+                description=f"Enriching flows... ({p.processed} done, {p.skipped} skipped, {p.failed} failed)",
+            )
+
+        result = enricher.enrich_all_flows(force=force, callback=on_progress)
+
+    console.print(f"\n[green]Flow enrichment complete:[/green]")
+    console.print(f"  Processed: {result.processed}")
+    console.print(f"  Skipped:   {result.skipped}")
+    console.print(f"  Failed:    {result.failed}")
+    if result.failed_flows:
+        console.print(f"\n[yellow]Failed flows:[/yellow]")
+        for fid in result.failed_flows:
+            console.print(f"  - {fid}")
+
+    conn.close()
+
+
 @app.command("enrich-status")
 def enrich_status(
     output_json: bool = typer.Option(False, "--json", "-j", help="Output as JSON"),
@@ -844,6 +912,11 @@ def flows(
             console.print(f"[dim]event:[/dim]   {flow.get('event_name','')}")
         elif flow["type"] == "cli":
             console.print(f"[dim]command:[/dim] {flow.get('command_name','')}")
+        if flow.get("explanation"):
+            console.print(f"\n[bold]Summary:[/bold] {flow['explanation']}")
+            model = flow.get("explain_model", "")
+            if model:
+                console.print(f"[dim]({model})[/dim]")
         if flow["triggers_out"]:
             console.print(f"\n[bold]Triggers out ({len(flow['triggers_out'])}):[/bold]")
             for t in flow["triggers_out"]:

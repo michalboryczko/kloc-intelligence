@@ -74,6 +74,14 @@ def test_mcp_list_tools_includes_kloc_flows():
     assert "type" in schema["properties"]
 
 
+def test_mcp_list_tools_includes_kloc_enrich_flows():
+    """Follow-up: kloc_enrich_flows must appear in the tool list."""
+    server = MCPServer(database="neo4j")
+    tool = next((t for t in server.get_tools() if t["name"] == "kloc_enrich_flows"), None)
+    assert tool is not None, "kloc_enrich_flows must be in tools/list"
+    assert "force" in tool["inputSchema"]["properties"]
+
+
 @pytest.fixture(scope="module")
 def loaded_flows():
     config = Neo4jConfig.from_env()

@@ -140,6 +140,12 @@ def get_flow_detail(connection: Neo4jConnection, flow_id: str) -> dict | None:
     class_fqn = flow_node.get("entry_fqn", "")
     method_name = flow_node.get("entry_method", "")
     full_fqn = f"{class_fqn}::{method_name}" if class_fqn and method_name else class_fqn
+    explanation = flow_node.get("explanation")
+    explain_model = flow_node.get("explain_model")
+    if explanation:
+        flow["explanation"] = explanation
+        if explain_model:
+            flow["explain_model"] = explain_model
     entry: dict = {
         "fqn": full_fqn,
         "class_fqn": class_fqn,

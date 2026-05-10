@@ -433,6 +433,28 @@ class MCPServer:
                 },
             },
             {
+                "name": "kloc_enrich_flows",
+                "description": (
+                    "Generate business-process summaries for all :Flow nodes. "
+                    "Walks depth-3 context with implementations from each flow's entry "
+                    "method, attaches source from referenced nodes, and asks the LLM for "
+                    "a 1-3 sentence abstract summary suitable for semantic search by "
+                    "business-process description."
+                ),
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "force": {
+                            "type": "boolean",
+                            "description": "Re-enrich already enriched flows",
+                            "default": False,
+                        },
+                        "project": project_prop,
+                    },
+                    "required": [],
+                },
+            },
+            {
                 "name": "kloc_flows",
                 "description": (
                     "List or inspect Symfony application flows (HTTP/message/event/CLI). "
@@ -524,6 +546,7 @@ class MCPServer:
             "kloc_search": self._handle_search,
             "kloc_enrich": self._handle_enrich,
             "kloc_import_flows": self._handle_import_flows,
+            "kloc_enrich_flows": self._handle_enrich_flows,
             "kloc_flows": self._handle_flows,
             "kloc_source": self._handle_source,
             "kloc_chunks": self._handle_chunks,
@@ -778,6 +801,23 @@ class MCPServer:
             "flows": len(nodes),
             "flow_entry_edges": entry_count,
             "flow_triggers_edges": trigger_count,
+        }
+
+    def _handle_enrich_flows(self, args: dict) -> dict:
+        from ..ai.config import AIConfig
+        from ..ai.flow_enricher import FlowEnricher
+
+        project = args.get("project")
+        runner = self._get_runner(project)
+        ai_config = AIConfig.from_env()
+        enricher = FlowEnricher(runner, ai_config)
+        progress = enricher.enrich_all_flows(force=args.get("force", False))
+        return {
+            "total": progress.total,
+            "processed": progress.processed,
+            "skipped": progress.skipped,
+            "failed": progress.failed,
+            "failed_flows": progress.failed_flows,
         }
 
     def _handle_flows(self, args: dict) -> dict:
