@@ -29,74 +29,6 @@ Focus on:
 
 Provide a description in 2-5 sentences. Do not include code snippets in your response."""
 
-# ── Flow explanation prompts ─────────────────────────────────
-
-FLOW_BUSINESS_SYSTEM = """You are a business analyst documenting software systems. \
-Analyze the provided architectural flow and describe the business process it implements."""
-
-FLOW_BUSINESS_TEMPLATE = """Describe the business process this flow represents from a user/customer perspective.
-
-Flow diagram:
-{{ diagram }}
-
-{{ code_context }}
-
-Focus on:
-- What business action does this flow handle? (e.g., "creates a new order", "retrieves customer data")
-- What are the steps from the user's perspective?
-- What data flows through the system?
-- What side effects occur? (emails sent, events dispatched, data persisted)
-
-Provide 3-6 sentences. Do not include code snippets."""
-
-FLOW_TECHNICAL_SYSTEM = """You are a software architect documenting system architecture. \
-Analyze the provided flow and describe its technical implementation."""
-
-FLOW_TECHNICAL_TEMPLATE = """Describe the technical architecture of this flow.
-
-Flow diagram:
-{{ diagram }}
-
-{{ code_context }}
-
-Focus on:
-- What architectural layers are involved? (controller, service, repository, component)
-- What patterns are used? (DI, strategy, template method, async messaging, event-driven)
-- What are the async boundaries? (message bus dispatches, event dispatcher)
-- How is data transformed between layers? (DTOs, entities, value objects)
-
-Provide 3-6 sentences. Do not include code snippets."""
-
-FLOW_SEARCH_SYSTEM = """You are an AI coding assistant indexer. \
-Write a short description optimized for search retrieval by AI coding agents."""
-
-FLOW_SEARCH_TEMPLATE = """Write a search-optimized description for this flow that an AI coding agent would use to find it.
-
-Flow diagram:
-{{ diagram }}
-
-{{ code_context }}
-
-Include: key action verbs, domain concepts, HTTP endpoints (if any), entity names, and what problem this flow solves.
-Write 2-3 sentences. Use natural language phrases that a developer would search for."""
-
-FLOW_LABELS_SYSTEM = """You are a code classification system. Generate labels/tags for code flows."""
-
-FLOW_LABELS_TEMPLATE = """Generate a JSON array of 5-15 labels/tags for this flow.
-
-Flow diagram:
-{{ diagram }}
-
-Include labels for:
-- Domain concepts (e.g., "order-management", "customer-data")
-- Technical patterns (e.g., "async-messaging", "cqrs", "repository-pattern")
-- HTTP verbs if applicable (e.g., "GET", "POST")
-- Entity names (e.g., "Order", "Customer")
-- Action verbs (e.g., "create", "retrieve", "notify")
-- Layer names (e.g., "controller", "service", "handler")
-
-Return ONLY a JSON array of strings, no other text."""
-
 EXPLAIN_METHOD_TEMPLATE = """Analyze this PHP method and describe what it does:
 
 FQN: {{ fqn }}
@@ -369,9 +301,6 @@ def run_search(
 ALL_SEARCH_COLLECTIONS = [
     "code_embeddings",
     "explain_embeddings",
-    "flow_business_embeddings",
-    "flow_technical_embeddings",
-    "flow_search_embeddings",
 ]
 
 

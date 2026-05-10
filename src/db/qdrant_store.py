@@ -17,9 +17,6 @@ from qdrant_client.models import (
 COLLECTIONS = {
     "code_embeddings": "Source code embeddings for Class/Method nodes",
     "explain_embeddings": "Human-language explanation embeddings",
-    "flow_business_embeddings": "Flow business process descriptions",
-    "flow_technical_embeddings": "Flow technical architecture descriptions",
-    "flow_search_embeddings": "Flow search descriptions for AI agents",
 }
 
 
