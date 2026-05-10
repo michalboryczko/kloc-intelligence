@@ -676,12 +676,22 @@ def import_flows(
     path: str = typer.Argument(..., help="Path to symfony-kloc.json"),
     clear: bool = typer.Option(True, help="Clear existing flows before import"),
 ):
-    """Import symfony-kloc.json flows into Neo4j."""
+    """Import symfony-kloc.json flows into Neo4j as :Flow nodes with FLOW_ENTRY and FLOW_TRIGGERS edges.
+
+    Replaces all existing flows on each call and drops the legacy flow_* Qdrant collections.
+    """
+    import os
     import time as time_mod
     from .config import Neo4jConfig
     from .db.connection import Neo4jConnection
     from .db.schema import ensure_schema
     from .db.flow_importer import load_symfony_kloc, parse_flows, import_flow_nodes, import_flow_edges, clear_flows
+
+    stale_qdrant_collections = (
+        "flow_business_embeddings",
+        "flow_technical_embeddings",
+        "flow_search_embeddings",
+    )
 
     config = Neo4jConfig.from_env()
     conn = Neo4jConnection(config)
@@ -693,7 +703,26 @@ def import_flows(
     console.print(f"Parsing {path}...")
     data = load_symfony_kloc(path)
     nodes, edges = parse_flows(data)
-    console.print(f"  Parsed {len(nodes)} flow nodes, {len(edges)} flow edges")
+    entry_count = sum(1 for e in edges if e["type"] == "flow_entry")
+    trigger_count = sum(1 for e in edges if e["type"] == "flow_triggers")
+    console.print(
+        f"  Parsed {len(nodes)} flow nodes, {entry_count} FLOW_ENTRY edges, "
+        f"{trigger_count} FLOW_TRIGGERS edges"
+    )
+
+    try:
+        from qdrant_client import QdrantClient
+        qdrant_url = os.environ.get("QDRANT_URL", "http://localhost:6333")
+        qdrant_api_key = os.environ.get("QDRANT_API_KEY") or None
+        qdrant = QdrantClient(url=qdrant_url, api_key=qdrant_api_key)
+        for name in stale_qdrant_collections:
+            try:
+                qdrant.delete_collection(name)
+            except Exception:
+                pass
+        qdrant.close()
+    except Exception as exc:
+        console.print(f"[yellow]Skipping Qdrant flow_* cleanup: {exc}[/yellow]")
 
     if clear:
         console.print("Clearing existing flows...")
@@ -705,7 +734,10 @@ def import_flows(
     import_flow_edges(conn, edges)
 
     total = time_mod.perf_counter() - start
-    console.print(f"\n[green]Flow import complete in {total:.1f}s[/green]")
+    console.print(
+        f"\n[green]Imported {len(nodes)} flows, {entry_count} FLOW_ENTRY edges, "
+        f"{trigger_count} FLOW_TRIGGERS edges in {total:.1f}s[/green]"
+    )
     conn.close()
 
 
