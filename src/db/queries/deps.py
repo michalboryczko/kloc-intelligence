@@ -36,20 +36,20 @@ def query_deps_direct(runner: QueryRunner, node_id: str) -> list[dict]:
     results = []
     for record in records:
         target = record["target"]
-        results.append({
-            "target_id": target["node_id"],
-            "target_fqn": target["fqn"],
-            "loc_file": record["loc_file"],
-            "loc_line": record["loc_line"],
-            "target_file": target.get("file"),
-            "target_start_line": target.get("start_line"),
-        })
+        results.append(
+            {
+                "target_id": target["node_id"],
+                "target_fqn": target["fqn"],
+                "loc_file": record["loc_file"],
+                "loc_line": record["loc_line"],
+                "target_file": target.get("file"),
+                "target_start_line": target.get("start_line"),
+            }
+        )
     return results
 
 
-def query_deps_with_members(
-    runner: QueryRunner, node_id: str, limit: int = 100
-) -> list[dict]:
+def query_deps_with_members(runner: QueryRunner, node_id: str, limit: int = 100) -> list[dict]:
     """Query deps including member expansion for container nodes.
 
     Returns list of dicts with keys: target_id, target_fqn, loc_file, loc_line,
@@ -69,14 +69,16 @@ def query_deps_with_members(
         if target_id in seen_targets:
             continue
         seen_targets.add(target_id)
-        results.append({
-            "target_id": target_id,
-            "target_fqn": target["fqn"],
-            "loc_file": record["loc_file"],
-            "loc_line": record["loc_line"],
-            "target_file": target.get("file"),
-            "target_start_line": target.get("start_line"),
-        })
+        results.append(
+            {
+                "target_id": target_id,
+                "target_fqn": target["fqn"],
+                "loc_file": record["loc_file"],
+                "loc_line": record["loc_line"],
+                "target_file": target.get("file"),
+                "target_start_line": target.get("start_line"),
+            }
+        )
     return results
 
 

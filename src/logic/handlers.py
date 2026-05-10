@@ -98,7 +98,9 @@ class InstantiationHandler:
 
         # Use containing method's FQN if available, otherwise source's
         if ctx.containing_method_id and ctx.containing_method_fqn:
-            entry_fqn = format_method_fqn(ctx.containing_method_fqn, ctx.containing_method_kind or "")
+            entry_fqn = format_method_fqn(
+                ctx.containing_method_fqn, ctx.containing_method_kind or ""
+            )
             entry_kind = ctx.containing_method_kind or ctx.source_kind
             entry_node_id = ctx.containing_method_id
         else:
@@ -285,15 +287,17 @@ class PropertyAccessHandler:
                 break
 
         if not found:
-            bucket.property_access_groups[prop_fqn].append({
-                "method_fqn": method_fqn,
-                "method_id": method_id,
-                "method_kind": method_kind,
-                "lines": [ctx.line],
-                "on_expr": on_expr,
-                "on_kind": on_kind,
-                "file": ctx.file,
-            })
+            bucket.property_access_groups[prop_fqn].append(
+                {
+                    "method_fqn": method_fqn,
+                    "method_id": method_id,
+                    "method_kind": method_kind,
+                    "lines": [ctx.line],
+                    "on_expr": on_expr,
+                    "on_kind": on_kind,
+                    "file": ctx.file,
+                }
+            )
 
 
 class ParamReturnHandler:

@@ -9,13 +9,6 @@ Tests cover:
 """
 
 from src.models.node import NodeData
-from src.models.results import (
-    ArgumentInfo,
-    ContextEntry,
-    ContextResult,
-    DefinitionInfo,
-    MemberRef,
-)
 from src.models.output import (
     ContextOutput,
     OutputArgumentInfo,
@@ -24,6 +17,13 @@ from src.models.output import (
     OutputMemberRef,
     OutputTarget,
     _shorten_param_key,
+)
+from src.models.results import (
+    ArgumentInfo,
+    ContextEntry,
+    ContextResult,
+    DefinitionInfo,
+    MemberRef,
 )
 
 
@@ -97,7 +97,9 @@ class TestOutputArgumentInfo:
         assert out.value_source == "literal"
 
     def test_to_dict_required_fields(self):
-        out = OutputArgumentInfo(position=0, param_name="$id", value_expr="42", value_source="literal")
+        out = OutputArgumentInfo(
+            position=0, param_name="$id", value_expr="42", value_source="literal"
+        )
         d = out.to_dict()
         assert d == {
             "position": 0,

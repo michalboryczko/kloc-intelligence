@@ -18,20 +18,24 @@ Key design rules:
 
 from __future__ import annotations
 
-from ..db.query_runner import QueryRunner
 from ..db.queries.context_interface import (
+    Q1_DIRECT_IMPLEMENTORS,
     Q5_CONTRACT_RELEVANCE,
     Q6_INJECTION_POINT_CALLS,
     Q7_INTERFACE_METHODS,
     Q8_IMPLEMENTS_DEPTH2,
-    Q1_DIRECT_IMPLEMENTORS,
     fetch_interface_used_by_data,
     fetch_interface_uses_data,
 )
+from ..db.query_runner import QueryRunner
 from ..logic.graph_helpers import format_method_fqn
 from ..models.node import NodeData
 from ..models.results import ContextEntry
-from .class_context import build_caller_chain_for_method, _build_call_arguments, build_class_uses_recursive
+from .class_context import (
+    _build_call_arguments,
+    build_caller_chain_for_method,
+    build_class_uses_recursive,
+)
 
 # Priority order for USES entries
 USES_PRIORITY: dict[str, int] = {
@@ -282,9 +286,7 @@ def build_interface_used_by(
         seen_props.add(prop_id)
 
         # Skip if injection doesn't call any contract method
-        if not _check_contract_relevance(
-            runner, prop_id, prop_fqn, contract_method_names
-        ):
+        if not _check_contract_relevance(runner, prop_id, prop_fqn, contract_method_names):
             continue
 
         via_fqn = pt.get("via_fqn")
@@ -418,7 +420,9 @@ def build_interface_used_by(
                         if not info["sites"]:
                             # Retroactive: create initial site from first_line
                             # with CURRENT method name (matches kloc-cli)
-                            info["sites"].append({"method": method_name, "line": info["first_line"]})
+                            info["sites"].append(
+                                {"method": method_name, "line": info["first_line"]}
+                            )
                         info["sites"].append(site_entry)
                     if method_id not in info["method_ids"]:
                         info["method_ids"].add(method_id)
@@ -449,7 +453,9 @@ def build_interface_used_by(
                     entry_line = None
                 elif sites:
                     first_site = sites[0]
-                    entry_line = first_site.get("line") if isinstance(first_site, dict) else first_site
+                    entry_line = (
+                        first_site.get("line") if isinstance(first_site, dict) else first_site
+                    )
                 else:
                     entry_line = info.get("first_line")
 
@@ -504,15 +510,9 @@ def build_interface_used_by(
     # ------------------------------------------------------------------
     # Sort within each bucket by (file, line) for stable ordering
     # ------------------------------------------------------------------
-    implements_entries.sort(
-        key=lambda e: (e.file or "", e.line if e.line is not None else 0)
-    )
-    extends_entries.sort(
-        key=lambda e: (e.file or "", e.line if e.line is not None else 0)
-    )
-    property_type_entries.sort(
-        key=lambda e: (e.file or "", e.line if e.line is not None else 0)
-    )
+    implements_entries.sort(key=lambda e: (e.file or "", e.line if e.line is not None else 0))
+    extends_entries.sort(key=lambda e: (e.file or "", e.line if e.line is not None else 0))
+    property_type_entries.sort(key=lambda e: (e.file or "", e.line if e.line is not None else 0))
 
     # ------------------------------------------------------------------
     # 9. Combine in priority order: implements, extends, property_type
@@ -628,15 +628,17 @@ def build_interface_uses(
 
     type_entries: list[ContextEntry] = []
     for td in target_best.values():
-        type_entries.append(ContextEntry(
-            depth=1,
-            node_id=td["target_id"],
-            fqn=td["target_fqn"],
-            kind=td.get("target_kind"),
-            file=td.get("file"),
-            line=td.get("line"),
-            ref_type=td["ref_type"],
-        ))
+        type_entries.append(
+            ContextEntry(
+                depth=1,
+                node_id=td["target_id"],
+                fqn=td["target_fqn"],
+                kind=td.get("target_kind"),
+                file=td.get("file"),
+                line=td.get("line"),
+                ref_type=td["ref_type"],
+            )
+        )
 
     # ------------------------------------------------------------------
     # 3. Optional: implementors
@@ -645,15 +647,17 @@ def build_interface_uses(
     if include_impl:
         records = runner.execute(Q1_DIRECT_IMPLEMENTORS, id=node.node_id)
         for r in records:
-            impl_entries.append(ContextEntry(
-                depth=1,
-                node_id=r["id"],
-                fqn=r["fqn"],
-                kind=r.get("kind"),
-                file=r.get("file"),
-                line=r.get("start_line"),
-                ref_type="implements",
-            ))
+            impl_entries.append(
+                ContextEntry(
+                    depth=1,
+                    node_id=r["id"],
+                    fqn=r["fqn"],
+                    kind=r.get("kind"),
+                    file=r.get("file"),
+                    line=r.get("start_line"),
+                    ref_type="implements",
+                )
+            )
 
     # ------------------------------------------------------------------
     # Depth-2+: recursive class USES expansion for each type dep
@@ -663,7 +667,11 @@ def build_interface_uses(
         for entry in extends_entries + impl_entries + type_entries:
             if entry.node_id and entry.kind in ("Class", "Interface", "Trait", "Enum"):
                 entry.children = build_class_uses_recursive(
-                    runner, entry.node_id, 2, max_depth, limit,
+                    runner,
+                    entry.node_id,
+                    2,
+                    max_depth,
+                    limit,
                     visited=set(parent_visited),
                 )
 

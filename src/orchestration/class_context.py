@@ -14,7 +14,6 @@ Key design rules:
 - All line numbers are stored 0-based; conversion to 1-based happens in OutputEntry.
 """
 
-from ..db.query_runner import QueryRunner
 from ..db.queries.context_class import (
     Q5_CALLER_CHAIN,
     Q7_INJECTION_POINT_CALLS,
@@ -24,16 +23,16 @@ from ..db.queries.context_class_uses import (
     Q3_BEHAVIORAL_DEPTH2,
     fetch_class_uses_data,
 )
-from ..logic.handlers import EdgeContext, EntryBucket, USED_BY_HANDLERS
-from ..logic.reference_types import (
-    infer_reference_type,
-    CHAINABLE_REFERENCE_TYPES,
-)
+from ..db.query_runner import QueryRunner
 from ..logic.graph_helpers import format_method_fqn
+from ..logic.handlers import USED_BY_HANDLERS, EdgeContext, EntryBucket
+from ..logic.reference_types import (
+    CHAINABLE_REFERENCE_TYPES,
+    infer_reference_type,
+)
 from ..models.node import NodeData
-from ..models.results import ContextEntry, ArgumentInfo
+from ..models.results import ArgumentInfo, ContextEntry
 from .value_context import resolve_promoted_property_fqn
-
 
 # Query to resolve access chain from a Call node's receiver
 _Q_RESOLVE_ACCESS_CHAIN = """
@@ -151,9 +150,7 @@ def _resolve_call_access_chain(
             member = prop_name.lstrip("$")
             if src_recv_value_kind == "self" or src_recv_value_kind is None:
                 chain = f"$this->{member}"
-            elif src_recv_value_kind == "parameter":
-                chain = f"{src_recv_name}->{member}"
-            elif src_recv_value_kind == "local":
+            elif src_recv_value_kind == "parameter" or src_recv_value_kind == "local":
                 chain = f"{src_recv_name}->{member}"
             else:
                 chain = f"$this->{member}"
@@ -162,9 +159,7 @@ def _resolve_call_access_chain(
             member = prop_name
             if src_recv_value_kind == "self" or src_recv_value_kind is None:
                 chain = f"$this->{member}()"
-            elif src_recv_value_kind == "parameter":
-                chain = f"{src_recv_name}->{member}()"
-            elif src_recv_value_kind == "local":
+            elif src_recv_value_kind == "parameter" or src_recv_value_kind == "local":
                 chain = f"{src_recv_name}->{member}()"
             else:
                 chain = f"$this->{member}()"
@@ -255,16 +250,18 @@ def _build_call_arguments(runner: "QueryRunner", call_id: str) -> list[ArgumentI
             if value_node_id:
                 source_chain = _trace_source_chain(runner, value_node_id)
 
-        infos.append(ArgumentInfo(
-            position=int(position),
-            param_name=param_name,
-            param_fqn=param_fqn,
-            value_expr=r.get("expression"),
-            value_source=value_kind,
-            value_type=r.get("value_type"),
-            value_ref_symbol=value_ref_symbol,
-            source_chain=source_chain,
-        ))
+        infos.append(
+            ArgumentInfo(
+                position=int(position),
+                param_name=param_name,
+                param_fqn=param_fqn,
+                value_expr=r.get("expression"),
+                value_source=value_kind,
+                value_type=r.get("value_type"),
+                value_ref_symbol=value_ref_symbol,
+                source_chain=source_chain,
+            )
+        )
     infos.sort(key=lambda a: a.position)
     return infos
 
@@ -299,9 +296,7 @@ def _build_on_from_receiver(
             member = recv_prop_name.lstrip("$")
             if src_recv_value_kind == "self" or src_recv_value_kind is None:
                 return f"$this->{member}", "property"
-            elif src_recv_value_kind == "parameter":
-                return f"{src_recv_name}->{member}", "property"
-            elif src_recv_value_kind == "local":
+            elif src_recv_value_kind == "parameter" or src_recv_value_kind == "local":
                 return f"{src_recv_name}->{member}", "property"
             return f"$this->{member}", "property"
         elif recv_prop_fqn:
@@ -406,7 +401,10 @@ def _build_property_access_entries(
 
 
 def _build_caller_chain_entry(
-    runner: QueryRunner, record: dict, depth: int, crossed_from_fqn: str | None = None,
+    runner: QueryRunner,
+    record: dict,
+    depth: int,
+    crossed_from_fqn: str | None = None,
 ) -> ContextEntry:
     """Build a single ContextEntry from a Q5 caller chain record.
 
@@ -603,7 +601,11 @@ def build_class_used_by_depth_callers(
         crossed_from_fqn = callee_fqn
 
     callee_name_raw = callee_fqn.rsplit("::", 1)[-1] if "::" in callee_fqn else callee_fqn
-    callee_display = callee_name_raw + "()" if callee_kind == "Method" and not callee_name_raw.endswith("()") else callee_name_raw
+    callee_display = (
+        callee_name_raw + "()"
+        if callee_kind == "Method" and not callee_name_raw.endswith("()")
+        else callee_name_raw
+    )
 
     # Collect direct callers only (no override parent traversal, matching kloc-cli)
     records = list(runner.execute(Q5_CALLER_CHAIN, method_id=method_id))
@@ -624,7 +626,8 @@ def build_class_used_by_depth_callers(
         uses_edge = runner.execute_single(
             "MATCH (src:Node {node_id: $caller_id})-[e:USES]->(tgt:Node {node_id: $method_id}) "
             "RETURN e.loc_line AS loc_line, e.loc_file AS loc_file",
-            caller_id=caller_id, method_id=method_id,
+            caller_id=caller_id,
+            method_id=method_id,
         )
         if uses_edge and uses_edge.get("loc_line") is not None:
             call_line = uses_edge["loc_line"]
@@ -642,9 +645,7 @@ def build_class_used_by_depth_callers(
 
         if call_id:
             # Resolve receiver for on/onKind
-            recv_rec = runner.execute_single(
-                _Q_CALL_RECEIVER_FOR_DEPTH, call_id=call_id
-            )
+            recv_rec = runner.execute_single(_Q_CALL_RECEIVER_FOR_DEPTH, call_id=call_id)
             if recv_rec:
                 recv_kind = recv_rec.get("recv_value_kind")
                 recv_name = recv_rec.get("recv_name")
@@ -652,7 +653,9 @@ def build_class_used_by_depth_callers(
                 src_prop_name = recv_rec.get("src_prop_name")
                 call_kind_val = recv_rec.get("call_kind")
 
-                if recv_kind == "self" or (recv_kind is None and call_kind_val in ("access", "method", "method_static")):
+                if recv_kind == "self" or (
+                    recv_kind is None and call_kind_val in ("access", "method", "method_static")
+                ):
                     # Self access: $this->prop
                     if src_prop_name:
                         on_expr = f"$this->{src_prop_name.lstrip('$')}"
@@ -753,15 +756,17 @@ def build_class_used_by(
     for child in extends_children:
         rel = child.get("rel_type", "EXTENDS").lower()
         ref = "extends" if rel == "extends" else "implements"
-        extends_entries.append(ContextEntry(
-            depth=1,
-            node_id=child["id"],
-            fqn=child["fqn"],
-            kind=child.get("kind"),
-            file=child.get("file"),
-            line=child.get("start_line"),
-            ref_type=ref,
-        ))
+        extends_entries.append(
+            ContextEntry(
+                depth=1,
+                node_id=child["id"],
+                fqn=child["fqn"],
+                kind=child.get("kind"),
+                file=child.get("file"),
+                line=child.get("start_line"),
+                ref_type=ref,
+            )
+        )
 
     # ------------------------------------------------------------------
     # Build call node indices:
@@ -1032,7 +1037,9 @@ def build_class_used_by(
 
         callee_name = emc.get("callee_name")
         callee_kind = emc.get("callee_kind", "")
-        callee_display = (callee_name + "()") if callee_kind == "Method" and callee_name else callee_name
+        callee_display = (
+            (callee_name + "()") if callee_kind == "Method" and callee_name else callee_name
+        )
 
         # Build access chain from receiver
         recv_value_kind = emc.get("recv_value_kind")
@@ -1043,8 +1050,12 @@ def build_class_used_by(
         src_recv_name = emc.get("src_recv_name")
 
         on_expr, on_kind = _build_on_from_receiver(
-            recv_value_kind, recv_name, recv_prop_fqn, recv_prop_name,
-            src_recv_value_kind, src_recv_name,
+            recv_value_kind,
+            recv_name,
+            recv_prop_fqn,
+            recv_prop_name,
+            src_recv_value_kind,
+            src_recv_name,
         )
 
         mc_line = emc.get("edge_line") if emc.get("edge_line") is not None else emc.get("call_line")
@@ -1083,8 +1094,12 @@ def build_class_used_by(
         src_recv_name = epa.get("src_recv_name")
 
         on_expr, on_kind = _build_on_from_receiver(
-            recv_value_kind, recv_name, src_prop_fqn, src_prop_name,
-            src_recv_value_kind, src_recv_name,
+            recv_value_kind,
+            recv_name,
+            src_prop_fqn,
+            src_prop_name,
+            src_recv_value_kind,
+            src_recv_name,
         )
 
         if prop_fqn not in bucket.property_access_groups:
@@ -1093,22 +1108,26 @@ def build_class_used_by(
         # Group by (method, on_expr, on_kind)
         found = False
         for group_entry in bucket.property_access_groups[prop_fqn]:
-            if (group_entry["method_fqn"] == caller_fqn
-                    and group_entry["on_expr"] == on_expr
-                    and group_entry["on_kind"] == on_kind):
+            if (
+                group_entry["method_fqn"] == caller_fqn
+                and group_entry["on_expr"] == on_expr
+                and group_entry["on_kind"] == on_kind
+            ):
                 group_entry["lines"].append(call_line)
                 found = True
                 break
         if not found:
-            bucket.property_access_groups[prop_fqn].append({
-                "method_fqn": caller_fqn,
-                "method_id": caller_id,
-                "method_kind": caller_kind,
-                "lines": [call_line],
-                "on_expr": on_expr,
-                "on_kind": on_kind,
-                "file": epa.get("call_file") or epa.get("caller_file"),
-            })
+            bucket.property_access_groups[prop_fqn].append(
+                {
+                    "method_fqn": caller_fqn,
+                    "method_id": caller_id,
+                    "method_kind": caller_kind,
+                    "lines": [call_line],
+                    "on_expr": on_expr,
+                    "on_kind": on_kind,
+                    "file": epa.get("call_file") or epa.get("caller_file"),
+                }
+            )
 
     # Rebuild property access entries with the new groups
     result_property_access = _build_property_access_entries(bucket, node.fqn, depth=1)
@@ -1153,9 +1172,7 @@ def build_class_used_by(
         # Expand extends entries with override methods
         for entry in result_extends:
             if entry.node_id and entry.ref_type in ("extends", "implements"):
-                override_records = runner.execute(
-                    _Q_OVERRIDE_METHODS, subclass_id=entry.node_id
-                )
+                override_records = runner.execute(_Q_OVERRIDE_METHODS, subclass_id=entry.node_id)
                 override_children: list[ContextEntry] = []
                 for ov in override_records:
                     ov_entry = ContextEntry(
@@ -1215,16 +1232,16 @@ def build_class_used_by(
 
                     callee_display = (
                         callee_name + "()"
-                        if callee_kind == "Method" and callee_name and not callee_name.endswith("()")
+                        if callee_kind == "Method"
+                        and callee_name
+                        and not callee_name.endswith("()")
                         else callee_name
                     )
 
                     # Build on from receiver resolution
                     on_expr = None
                     if call_id:
-                        ac_rec = runner.execute_single(
-                            _Q_RESOLVE_ACCESS_CHAIN, call_id=call_id
-                        )
+                        ac_rec = runner.execute_single(_Q_RESOLVE_ACCESS_CHAIN, call_id=call_id)
                         if ac_rec:
                             on_expr, _ = _resolve_call_access_chain(runner, call_id)
 
@@ -1232,10 +1249,14 @@ def build_class_used_by(
                     arguments = _build_call_arguments(runner, call_id) if call_id else []
 
                     # Get call file
-                    call_file_rec = runner.execute_single(
-                        "MATCH (c:Node {node_id: $cid}) RETURN c.file AS f",
-                        cid=call_id,
-                    ) if call_id else None
+                    call_file_rec = (
+                        runner.execute_single(
+                            "MATCH (c:Node {node_id: $cid}) RETURN c.file AS f",
+                            cid=call_id,
+                        )
+                        if call_id
+                        else None
+                    )
                     call_file = call_file_rec["f"] if call_file_rec else None
 
                     # Dedup by callee FQN
@@ -1243,11 +1264,17 @@ def build_class_used_by(
                     if callee_key in entries_by_callee:
                         existing_entry = entries_by_callee[callee_key]
                         # Extract method short name for sites
-                        method_short = method_fqn_raw.rsplit("::", 1)[-1] if "::" in method_fqn_raw else method_fqn_raw
+                        method_short = (
+                            method_fqn_raw.rsplit("::", 1)[-1]
+                            if "::" in method_fqn_raw
+                            else method_fqn_raw
+                        )
                         if existing_entry.sites is None:
                             # First site was the existing entry's line
                             prev_method_line = existing_entry.line
-                            existing_entry.sites = [{"method": method_short, "line": prev_method_line}]
+                            existing_entry.sites = [
+                                {"method": method_short, "line": prev_method_line}
+                            ]
                             existing_entry.line = None
                         existing_entry.sites.append({"method": method_short, "line": call_line})
                         continue
@@ -1269,7 +1296,9 @@ def build_class_used_by(
                     entries_by_callee[callee_key] = child
                     entry.children.append(child)
 
-                entry.children.sort(key=lambda e: (e.file or "", e.line if e.line is not None else 0))
+                entry.children.sort(
+                    key=lambda e: (e.file or "", e.line if e.line is not None else 0)
+                )
 
         # Expand property_access entries with per-method children
         for entry in result_property_access:
@@ -1379,7 +1408,9 @@ ORDER BY child.file, child.start_line
 
 
 def _build_implements_depth2_uses(
-    runner: QueryRunner, class_id: str, interface_id: str,
+    runner: QueryRunner,
+    class_id: str,
+    interface_id: str,
 ) -> list[ContextEntry]:
     """Build depth-2 children for [implements] in USES.
 
@@ -1421,7 +1452,9 @@ def _build_implements_depth2_uses(
 
 
 def _build_extends_depth2_uses(
-    runner: QueryRunner, class_id: str, parent_id: str,
+    runner: QueryRunner,
+    class_id: str,
+    parent_id: str,
 ) -> list[ContextEntry]:
     """Build depth-2 children for [extends] in USES.
 
@@ -1556,7 +1589,9 @@ def build_class_uses(
                 }
             elif existing_th["ref_type"] == "return_type":
                 # Pick the earlier line for consistent ordering
-                if member_line is not None and (existing_th["line"] is None or member_line < existing_th["line"]):
+                if member_line is not None and (
+                    existing_th["line"] is None or member_line < existing_th["line"]
+                ):
                     existing_th["file"] = member_file
                     existing_th["line"] = member_line
 
@@ -1573,7 +1608,9 @@ def build_class_uses(
                 }
             elif existing["ref_type"] == "parameter_type":
                 # Pick the earliest line for consistent ordering
-                if member_line is not None and (existing["line"] is None or member_line < existing["line"]):
+                if member_line is not None and (
+                    existing["line"] is None or member_line < existing["line"]
+                ):
                     existing["file"] = member_file
                     existing["line"] = member_line
 
@@ -1617,10 +1654,16 @@ def build_class_uses(
         resolved_fqn = dep_target_fqn
         resolved_kind = dep_target_kind
 
-        if dep_target_kind in ("Method", "Property", "Argument", "Value", "Call", "Constant", "Function"):
-            rec = runner.execute_single(
-                Q6_TARGET_CONTAINING_CLASS, node_id=dep_target_id
-            )
+        if dep_target_kind in (
+            "Method",
+            "Property",
+            "Argument",
+            "Value",
+            "Call",
+            "Constant",
+            "Function",
+        ):
+            rec = runner.execute_single(Q6_TARGET_CONTAINING_CLASS, node_id=dep_target_id)
             if rec:
                 resolved_id = rec["class_id"]
                 resolved_fqn = rec["class_fqn"]
@@ -1800,13 +1843,9 @@ def build_class_uses(
     if max_depth >= 2:
         for entry in all_entries:
             if entry.ref_type == "implements" and entry.node_id:
-                entry.children = _build_implements_depth2_uses(
-                    runner, node.node_id, entry.node_id
-                )
+                entry.children = _build_implements_depth2_uses(runner, node.node_id, entry.node_id)
             elif entry.ref_type == "extends" and entry.node_id:
-                entry.children = _build_extends_depth2_uses(
-                    runner, node.node_id, entry.node_id
-                )
+                entry.children = _build_extends_depth2_uses(runner, node.node_id, entry.node_id)
 
     # ------------------------------------------------------------------
     # Depth-2+: recursive class USES expansion for non-structural deps
@@ -1820,7 +1859,11 @@ def build_class_uses(
                 continue
             if entry.node_id and entry.kind in ("Class", "Interface", "Trait", "Enum"):
                 entry.children = build_class_uses_recursive(
-                    runner, entry.node_id, 2, max_depth, limit,
+                    runner,
+                    entry.node_id,
+                    2,
+                    max_depth,
+                    limit,
                     visited=set(parent_visited),
                 )
 
@@ -1949,7 +1992,11 @@ def build_class_uses_recursive(
         # Recursive expansion
         if depth < max_depth and rel.get("target_kind") in ("Class", "Interface", "Trait", "Enum"):
             entry.children = build_class_uses_recursive(
-                runner, rel_target_id, depth + 1, max_depth, limit,
+                runner,
+                rel_target_id,
+                depth + 1,
+                max_depth,
+                limit,
                 visited | local_visited,
             )
 
@@ -1970,9 +2017,7 @@ def build_class_uses_recursive(
         dep_line = dep.get("line")
 
         if dep_target_kind in ("Method", "Property", "Argument", "Value", "Call"):
-            rec = runner.execute_single(
-                _Q_CONTAINING_CLASS_FOR_NODE, node_id=dep_target_id
-            )
+            rec = runner.execute_single(_Q_CONTAINING_CLASS_FOR_NODE, node_id=dep_target_id)
             if rec:
                 resolved_id = rec["class_id"]
                 resolved_fqn = rec["class_fqn"]
@@ -2012,7 +2057,11 @@ def build_class_uses_recursive(
         # Recursive expansion
         if depth < max_depth and resolved_kind in ("Class", "Interface", "Trait", "Enum"):
             entry.children = build_class_uses_recursive(
-                runner, resolved_id, depth + 1, max_depth, limit,
+                runner,
+                resolved_id,
+                depth + 1,
+                max_depth,
+                limit,
                 visited | local_visited,
             )
 

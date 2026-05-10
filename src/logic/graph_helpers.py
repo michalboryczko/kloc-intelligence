@@ -25,7 +25,9 @@ def member_display_name(kind: str, name: str) -> str:
     return name
 
 
-def sort_entries_by_priority(entries: list[dict], ref_type_priority: dict | None = None) -> list[dict]:
+def sort_entries_by_priority(
+    entries: list[dict], ref_type_priority: dict | None = None
+) -> list[dict]:
     """Sort context entries by reference type priority, then by file/line.
 
     Args:

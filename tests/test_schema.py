@@ -1,16 +1,17 @@
 """Tests for schema management."""
 
 from src.db.schema import (
-    NODE_KINDS,
-    EDGE_TYPES,
     CONSTRAINTS,
+    EDGE_TYPES,
     INDEXES,
-    ensure_schema,
-    verify_schema,
+    NODE_KINDS,
     drop_all,
-    get_node_count,
+    ensure_schema,
     get_edge_count,
+    get_node_count,
+    verify_schema,
 )
+
 from .conftest import requires_neo4j
 
 
@@ -30,12 +31,21 @@ def test_constraints_defined():
 
 
 def test_indexes_defined():
-    """Test that all 10 indexes are defined."""
-    assert len(INDEXES) == 10
+    """Test that the required indexes are defined."""
     expected = [
-        "node_fqn", "node_name", "node_kind", "node_symbol", "node_file",
-        "class_fqn", "method_fqn", "interface_fqn",
-        "value_kind", "call_kind",
+        "node_fqn",
+        "node_name",
+        "node_kind",
+        "node_symbol",
+        "node_file",
+        "class_fqn",
+        "method_fqn",
+        "interface_fqn",
+        "value_kind",
+        "call_kind",
+        "node_explanation",
+        "flow_id",
+        "flow_type",
     ]
     for name in expected:
         assert name in INDEXES

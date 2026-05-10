@@ -20,7 +20,6 @@ from pathlib import Path
 
 import yaml
 
-
 SCRIPT_DIR = Path(__file__).parent
 CORPUS_PATH = SCRIPT_DIR / "corpus.yaml"
 GOLDEN_DIR = SCRIPT_DIR / "golden"

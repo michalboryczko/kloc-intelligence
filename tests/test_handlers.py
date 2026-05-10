@@ -6,16 +6,16 @@ Tests use mock EdgeContext data -- no Neo4j required.
 import pytest
 
 from src.logic.handlers import (
+    USED_BY_HANDLERS,
     EdgeContext,
     EntryBucket,
-    InstantiationHandler,
     ExtendsHandler,
     ImplementsHandler,
-    PropertyTypeHandler,
+    InstantiationHandler,
     MethodCallHandler,
-    PropertyAccessHandler,
     ParamReturnHandler,
-    USED_BY_HANDLERS,
+    PropertyAccessHandler,
+    PropertyTypeHandler,
 )
 
 
@@ -53,8 +53,14 @@ class TestHandlerRegistry:
 
     def test_all_nine_ref_types_registered(self):
         expected_keys = {
-            "instantiation", "extends", "implements", "property_type",
-            "method_call", "property_access", "parameter_type", "return_type",
+            "instantiation",
+            "extends",
+            "implements",
+            "property_type",
+            "method_call",
+            "property_access",
+            "parameter_type",
+            "return_type",
             "type_hint",
         }
         assert set(USED_BY_HANDLERS.keys()) == expected_keys
@@ -577,20 +583,26 @@ class TestPropertyAccessHandler:
         handler = PropertyAccessHandler()
         bucket = EntryBucket()
 
-        handler.handle(make_ctx(
-            ref_type="property_access",
-            target_fqn="App\\Order::$id",
-            containing_method_id="method:a",
-            containing_method_fqn="App\\Svc::a",
-            containing_method_kind="Method",
-        ), bucket)
-        handler.handle(make_ctx(
-            ref_type="property_access",
-            target_fqn="App\\Order::$id",
-            containing_method_id="method:b",
-            containing_method_fqn="App\\Svc::b",
-            containing_method_kind="Method",
-        ), bucket)
+        handler.handle(
+            make_ctx(
+                ref_type="property_access",
+                target_fqn="App\\Order::$id",
+                containing_method_id="method:a",
+                containing_method_fqn="App\\Svc::a",
+                containing_method_kind="Method",
+            ),
+            bucket,
+        )
+        handler.handle(
+            make_ctx(
+                ref_type="property_access",
+                target_fqn="App\\Order::$id",
+                containing_method_id="method:b",
+                containing_method_fqn="App\\Svc::b",
+                containing_method_kind="Method",
+            ),
+            bucket,
+        )
 
         groups = bucket.property_access_groups["App\\Order::$id"]
         assert len(groups) == 2

@@ -29,7 +29,7 @@ def check_neo4j():
     """Check Neo4j connectivity, return (connection, runner) or (None, None)."""
     try:
         from src.config import Neo4jConfig
-        from src.db.connection import Neo4jConnection, Neo4jConnectionError
+        from src.db.connection import Neo4jConnection
         from src.db.query_runner import QueryRunner
 
         config = Neo4jConfig.from_env()
@@ -62,7 +62,7 @@ def ensure_data_loaded(conn, runner):
         return 0, 0
 
     print(f"Loading test data from {sot_path}...")
-    from src.db.importer import parse_sot, import_nodes, import_edges
+    from src.db.importer import import_edges, import_nodes, parse_sot
     from src.db.schema import drop_all, ensure_schema
 
     drop_all(conn)
@@ -83,61 +83,73 @@ def ensure_data_loaded(conn, runner):
 
 def bench_resolve_class(runner):
     from src.db.queries.resolve import resolve_symbol
+
     return lambda: resolve_symbol(runner, "App\\Entity\\Order")
 
 
 def bench_resolve_method(runner):
     from src.db.queries.resolve import resolve_symbol
+
     return lambda: resolve_symbol(runner, "App\\Entity\\Order::getTotal()")
 
 
 def bench_resolve_interface(runner):
     from src.db.queries.resolve import resolve_symbol
+
     return lambda: resolve_symbol(runner, "App\\Component\\OrderProcessorInterface")
 
 
 def bench_resolve_partial(runner):
     from src.db.queries.resolve import resolve_symbol
+
     return lambda: resolve_symbol(runner, "OrderController")
 
 
 def bench_usages_class_d1(runner):
     from src.orchestration.usages import run_usages
+
     return lambda: run_usages(runner, "App\\Entity\\Order", depth=1, limit=100)
 
 
 def bench_usages_method_d1(runner):
     from src.orchestration.usages import run_usages
+
     return lambda: run_usages(runner, "App\\Entity\\Order::getTotal()", depth=1, limit=100)
 
 
 def bench_usages_class_d2(runner):
     from src.orchestration.usages import run_usages
+
     return lambda: run_usages(runner, "App\\Entity\\Order", depth=2, limit=100)
 
 
 def bench_deps_class_d1(runner):
     from src.orchestration.deps import run_deps
+
     return lambda: run_deps(runner, "App\\Entity\\Order", depth=1, limit=100)
 
 
 def bench_deps_method_d1(runner):
     from src.orchestration.deps import run_deps
+
     return lambda: run_deps(runner, "App\\Service\\OrderService::createOrder()", depth=1, limit=100)
 
 
 def bench_deps_class_d2(runner):
     from src.orchestration.deps import run_deps
+
     return lambda: run_deps(runner, "App\\Entity\\Order", depth=2, limit=100)
 
 
 def bench_context_class_d1(runner):
     from src.orchestration.context import execute_context
+
     return lambda: execute_context(runner, "App\\Entity\\Order", depth=1, limit=100)
 
 
 def bench_context_method_d1(runner):
     from src.orchestration.context import execute_context
+
     return lambda: execute_context(
         runner, "App\\Service\\OrderService::createOrder()", depth=1, limit=100
     )
@@ -145,11 +157,13 @@ def bench_context_method_d1(runner):
 
 def bench_context_class_d2(runner):
     from src.orchestration.context import execute_context
+
     return lambda: execute_context(runner, "App\\Entity\\Order", depth=2, limit=100)
 
 
 def bench_context_interface_d1(runner):
     from src.orchestration.context import execute_context
+
     return lambda: execute_context(
         runner, "App\\Component\\OrderProcessorInterface", depth=1, limit=100
     )
@@ -157,23 +171,25 @@ def bench_context_interface_d1(runner):
 
 def bench_context_property_d1(runner):
     from src.orchestration.context import execute_context
-    return lambda: execute_context(
-        runner, "App\\Entity\\Order::$total", depth=1, limit=100
-    )
+
+    return lambda: execute_context(runner, "App\\Entity\\Order::$total", depth=1, limit=100)
 
 
 def bench_owners_method(runner):
     from src.orchestration.simple import run_owners
+
     return lambda: run_owners(runner, "App\\Service\\OrderService::createOrder()")
 
 
 def bench_owners_property(runner):
     from src.orchestration.simple import run_owners
+
     return lambda: run_owners(runner, "App\\Entity\\Order::$total")
 
 
 def bench_inherit_class_up(runner):
     from src.orchestration.simple import run_inherit
+
     return lambda: run_inherit(
         runner, "App\\Service\\LoggingOrderProcessor", direction="up", depth=5, limit=100
     )
@@ -181,6 +197,7 @@ def bench_inherit_class_up(runner):
 
 def bench_inherit_interface_down(runner):
     from src.orchestration.simple import run_inherit
+
     return lambda: run_inherit(
         runner, "App\\Component\\OrderProcessorInterface", direction="down", depth=5, limit=100
     )
@@ -188,6 +205,7 @@ def bench_inherit_interface_down(runner):
 
 def bench_overrides_up(runner):
     from src.orchestration.simple import run_overrides
+
     return lambda: run_overrides(
         runner, "App\\Service\\LoggingOrderProcessor::process()", direction="up", depth=5, limit=100
     )
@@ -195,14 +213,20 @@ def bench_overrides_up(runner):
 
 def bench_overrides_down(runner):
     from src.orchestration.simple import run_overrides
+
     return lambda: run_overrides(
-        runner, "App\\Component\\OrderProcessorInterface::process()", direction="down", depth=5, limit=100
+        runner,
+        "App\\Component\\OrderProcessorInterface::process()",
+        direction="down",
+        depth=5,
+        limit=100,
     )
 
 
 def bench_import_parse(runner):
     """Benchmark sot.json parsing only (no Neo4j write)."""
     from src.db.importer import parse_sot
+
     sot_path = str(PROJECT_ROOT.parent / "artifacts" / "kloc-dev" / "context-final" / "sot.json")
     return lambda: parse_sot(sot_path)
 
@@ -300,15 +324,23 @@ def format_result(result):
 def main():
     parser = argparse.ArgumentParser(description="kloc-intelligence Performance Benchmarks")
     parser.add_argument(
-        "--iterations", "-n", type=int, default=10,
+        "--iterations",
+        "-n",
+        type=int,
+        default=10,
         help="Number of iterations per benchmark (default: 10)",
     )
     parser.add_argument(
-        "--verbose", "-v", action="store_true",
+        "--verbose",
+        "-v",
+        action="store_true",
         help="Show individual iteration timings",
     )
     parser.add_argument(
-        "--group", "-g", type=str, default=None,
+        "--group",
+        "-g",
+        type=str,
+        default=None,
         help="Run only a specific group (resolve, usages, deps, context, owners, inherit, overrides, import)",
     )
     args = parser.parse_args()

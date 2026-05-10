@@ -1,8 +1,9 @@
 """Tests for symbol resolution queries."""
 
+from src.db.queries.resolve import SEARCHABLE_KINDS, resolve_symbol
 from src.db.query_runner import QueryRunner
-from src.db.queries.resolve import resolve_symbol, SEARCHABLE_KINDS
 from src.models.node import NodeData
+
 from .conftest import requires_neo4j
 
 

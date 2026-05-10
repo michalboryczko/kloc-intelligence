@@ -11,7 +11,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 haystack = pytest.importorskip("haystack", reason="ai extras not installed")
-from src.ai import pipelines  # ensure attribute lookup works for patch()  # noqa: F401, E402
+from src.ai import pipelines  # ensure attribute lookup works for patch()
 from src.ai.config import AIConfig, EmbeddingProviderConfig, LLMProviderConfig
 from src.ai.flow_enricher import (
     FlowEnricher,
@@ -30,7 +30,6 @@ from src.db.flow_importer import (
 from src.db.query_runner import QueryRunner
 
 from .conftest import requires_neo4j
-
 
 REFERENCE_FIXTURE = Path(
     "/Users/michal/dev/ai/kloc/kloc-reference-project-php/.kloc/symfony-kloc.json"
@@ -83,7 +82,9 @@ def test_enrich_flow_writes_explanation_property(loaded_with_flows):
     enricher._explain_pipeline = fake_pipe
     enricher._embed_pipeline = embed_pipe
 
-    with patch("src.ai.pipelines.run_explain_flow", return_value="Creates new orders for customers."):
+    with patch(
+        "src.ai.pipelines.run_explain_flow", return_value="Creates new orders for customers."
+    ):
         flow_id = "flow:http:App\\Ui\\Rest\\Controller\\OrderController::create"
         result = enricher.enrich_flow(flow_id, force=True)
 

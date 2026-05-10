@@ -42,14 +42,7 @@ class TestSourceReader:
     def test_read_class_source(self, tmp_path):
         php = tmp_path / "src" / "Order.php"
         php.parent.mkdir(parents=True)
-        php.write_text(
-            "<?php\n"
-            "namespace App\\Entity;\n"
-            "\n"
-            "class Order {\n"
-            "    private int $id;\n"
-            "}\n"
-        )
+        php.write_text("<?php\nnamespace App\\Entity;\n\nclass Order {\n    private int $id;\n}\n")
         reader = SourceReader(str(tmp_path))
         node = _make_node(
             kind="Class",

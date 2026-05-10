@@ -3,6 +3,7 @@
 from src.db.query_runner import QueryRunner
 from src.db.result_mapper import record_to_node, records_to_nodes
 from src.models.node import NodeData
+
 from .conftest import requires_neo4j
 
 
@@ -173,9 +174,7 @@ class TestRecordToNode:
     def test_record_to_node_value(self, loaded_database):
         """Test mapping a Value node."""
         runner = QueryRunner(loaded_database)
-        records = runner.execute(
-            "MATCH (n:Node {kind: 'Value'}) RETURN n LIMIT 1"
-        )
+        records = runner.execute("MATCH (n:Node {kind: 'Value'}) RETURN n LIMIT 1")
         assert len(records) == 1
         node = record_to_node(records[0])
         assert node.kind == "Value"
@@ -184,9 +183,7 @@ class TestRecordToNode:
     def test_records_to_nodes(self, loaded_database):
         """Test mapping multiple records."""
         runner = QueryRunner(loaded_database)
-        records = runner.execute(
-            "MATCH (n:Node {kind: 'Class'}) RETURN n LIMIT 5"
-        )
+        records = runner.execute("MATCH (n:Node {kind: 'Class'}) RETURN n LIMIT 5")
         nodes = records_to_nodes(records)
         assert len(nodes) == 5
         assert all(isinstance(n, NodeData) for n in nodes)
@@ -201,8 +198,7 @@ class TestRecordToNode:
         """Test that documentation is returned as a list."""
         runner = QueryRunner(loaded_database)
         records = runner.execute(
-            "MATCH (n:Node {kind: 'Method'}) WHERE n.documentation IS NOT NULL "
-            "RETURN n LIMIT 1"
+            "MATCH (n:Node {kind: 'Method'}) WHERE n.documentation IS NOT NULL RETURN n LIMIT 1"
         )
         assert len(records) == 1
         node = record_to_node(records[0])

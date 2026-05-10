@@ -8,7 +8,6 @@ different OpenAI-compatible endpoint.
 import os
 from dataclasses import dataclass, field
 
-
 DEFAULT_LLM_API_URL = "https://openrouter.ai/api/v1"
 DEFAULT_LLM_MODEL = "minimax/minimax-m2.7"
 DEFAULT_EMBEDDING_API_URL = "https://openrouter.ai/api/v1"

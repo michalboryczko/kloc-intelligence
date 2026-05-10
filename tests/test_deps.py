@@ -4,10 +4,11 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from src.db.query_runner import QueryRunner
 from src.models.node import NodeData
 from src.models.results import DepsEntry, DepsTreeResult
-from src.orchestration.deps import run_deps, run_deps_by_id, _build_deps_tree
-from src.db.query_runner import QueryRunner
+from src.orchestration.deps import _build_deps_tree, run_deps
+
 from .conftest import requires_neo4j
 
 
@@ -25,8 +26,9 @@ def _make_node(**overrides) -> NodeData:
     return NodeData(**defaults)
 
 
-def _mock_edge(target_id, target_fqn, loc_file=None, loc_line=None,
-               target_file=None, target_start_line=None):
+def _mock_edge(
+    target_id, target_fqn, loc_file=None, loc_line=None, target_file=None, target_start_line=None
+):
     return {
         "target_id": target_id,
         "target_fqn": target_fqn,
@@ -58,12 +60,20 @@ class TestBuildDepsTreeUnit:
         target = _make_node()
 
         mock_edges = [
-            _mock_edge("dep-1", "App\\Entity\\Order", "src/Service/OrderService.php", 30,
-                       "src/Entity/Order.php", 5)
+            _mock_edge(
+                "dep-1",
+                "App\\Entity\\Order",
+                "src/Service/OrderService.php",
+                30,
+                "src/Entity/Order.php",
+                5,
+            )
         ]
 
-        with patch("src.orchestration.deps.query_deps_for_node", return_value=mock_edges), \
-             patch("src.orchestration.deps.query_deps_direct", return_value=[]):
+        with (
+            patch("src.orchestration.deps.query_deps_for_node", return_value=mock_edges),
+            patch("src.orchestration.deps.query_deps_direct", return_value=[]),
+        ):
             result = _build_deps_tree(runner, target, depth=1, limit=100)
 
         assert len(result.tree) == 1
@@ -78,12 +88,12 @@ class TestBuildDepsTreeUnit:
         runner = MagicMock(spec=QueryRunner)
         target = _make_node()
 
-        mock_edges = [
-            _mock_edge("dep-1", "App\\Dep", None, None, "src/Dep.php", 42)
-        ]
+        mock_edges = [_mock_edge("dep-1", "App\\Dep", None, None, "src/Dep.php", 42)]
 
-        with patch("src.orchestration.deps.query_deps_for_node", return_value=mock_edges), \
-             patch("src.orchestration.deps.query_deps_direct", return_value=[]):
+        with (
+            patch("src.orchestration.deps.query_deps_for_node", return_value=mock_edges),
+            patch("src.orchestration.deps.query_deps_direct", return_value=[]),
+        ):
             result = _build_deps_tree(runner, target, depth=1, limit=100)
 
         assert result.tree[0].file == "src/Dep.php"
@@ -94,13 +104,12 @@ class TestBuildDepsTreeUnit:
         runner = MagicMock(spec=QueryRunner)
         target = _make_node()
 
-        mock_edges = [
-            _mock_edge(f"dep-{i}", f"App\\Dep{i}", f"f{i}.php", i)
-            for i in range(10)
-        ]
+        mock_edges = [_mock_edge(f"dep-{i}", f"App\\Dep{i}", f"f{i}.php", i) for i in range(10)]
 
-        with patch("src.orchestration.deps.query_deps_for_node", return_value=mock_edges), \
-             patch("src.orchestration.deps.query_deps_direct", return_value=[]):
+        with (
+            patch("src.orchestration.deps.query_deps_for_node", return_value=mock_edges),
+            patch("src.orchestration.deps.query_deps_direct", return_value=[]),
+        ):
             result = _build_deps_tree(runner, target, depth=1, limit=3)
 
         assert len(result.tree) == 3
@@ -115,8 +124,10 @@ class TestBuildDepsTreeUnit:
             _mock_edge("dep-1", "App\\Dep", "f.php", 2),
         ]
 
-        with patch("src.orchestration.deps.query_deps_for_node", return_value=mock_edges), \
-             patch("src.orchestration.deps.query_deps_direct", return_value=[]):
+        with (
+            patch("src.orchestration.deps.query_deps_for_node", return_value=mock_edges),
+            patch("src.orchestration.deps.query_deps_direct", return_value=[]),
+        ):
             result = _build_deps_tree(runner, target, depth=1, limit=100)
 
         assert len(result.tree) == 1
@@ -130,8 +141,10 @@ class TestBuildDepsTreeUnit:
         level1_edges = [_mock_edge("dep-1", "App\\Dep1", "d1.php", 10)]
         level2_edges = [_mock_edge("dep-2", "App\\Dep2", "d2.php", 20)]
 
-        with patch("src.orchestration.deps.query_deps_for_node", return_value=level1_edges), \
-             patch("src.orchestration.deps.query_deps_direct", return_value=level2_edges):
+        with (
+            patch("src.orchestration.deps.query_deps_for_node", return_value=level1_edges),
+            patch("src.orchestration.deps.query_deps_direct", return_value=level2_edges),
+        ):
             result = _build_deps_tree(runner, target, depth=2, limit=100)
 
         assert len(result.tree) == 1
@@ -155,8 +168,10 @@ class TestBuildDepsTreeUnit:
                 return [_mock_edge("dep-2", "D2")]
             return []
 
-        with patch("src.orchestration.deps.query_deps_for_node", return_value=level1_edges), \
-             patch("src.orchestration.deps.query_deps_direct", side_effect=mock_direct):
+        with (
+            patch("src.orchestration.deps.query_deps_for_node", return_value=level1_edges),
+            patch("src.orchestration.deps.query_deps_direct", side_effect=mock_direct),
+        ):
             result = _build_deps_tree(runner, target, depth=2, limit=100)
 
         # dep-2 is found as child of dep-1 first (DFS order)
@@ -182,8 +197,10 @@ class TestBuildDepsTreeUnit:
                 return [_mock_edge("dep-1", "D1")]  # Already visited at depth 1
             return []
 
-        with patch("src.orchestration.deps.query_deps_for_node", return_value=level1_edges), \
-             patch("src.orchestration.deps.query_deps_direct", side_effect=mock_direct):
+        with (
+            patch("src.orchestration.deps.query_deps_for_node", return_value=level1_edges),
+            patch("src.orchestration.deps.query_deps_direct", side_effect=mock_direct),
+        ):
             result = _build_deps_tree(runner, target, depth=2, limit=100)
 
         assert len(result.tree) == 2
@@ -204,8 +221,10 @@ class TestBuildDepsTreeUnit:
             _mock_edge("d4", "D4"),
         ]
 
-        with patch("src.orchestration.deps.query_deps_for_node", return_value=level1_edges), \
-             patch("src.orchestration.deps.query_deps_direct", return_value=level2_edges):
+        with (
+            patch("src.orchestration.deps.query_deps_for_node", return_value=level1_edges),
+            patch("src.orchestration.deps.query_deps_direct", return_value=level2_edges),
+        ):
             result = _build_deps_tree(runner, target, depth=2, limit=3)
 
         total = _count_entries(result.tree)
@@ -225,18 +244,14 @@ class TestRunDepsUnit:
         runner = MagicMock(spec=QueryRunner)
         target = _make_node()
 
-        with patch("src.orchestration.deps.resolve_symbol", return_value=[target]) as mock_resolve, \
-             patch("src.orchestration.deps._build_deps_tree") as mock_build:
+        with (
+            patch("src.orchestration.deps.resolve_symbol", return_value=[target]) as mock_resolve,
+            patch("src.orchestration.deps._build_deps_tree") as mock_build,
+        ):
             mock_build.return_value = DepsTreeResult(target=target, max_depth=1, tree=[])
             run_deps(runner, "App\\Service\\OrderService::createOrder()")
 
         mock_resolve.assert_called_once_with(runner, "App\\Service\\OrderService::createOrder()")
-
-    def test_run_deps_by_id_not_found(self):
-        runner = MagicMock(spec=QueryRunner)
-        with patch("src.orchestration.deps.fetch_node", return_value=None):
-            with pytest.raises(ValueError, match="Node not found"):
-                run_deps_by_id(runner, "nonexistent-id")
 
 
 class TestDepsToDict:

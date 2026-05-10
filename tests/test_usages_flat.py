@@ -5,24 +5,28 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from src.db.query_runner import QueryRunner
 from src.models.node import NodeData
 from src.models.results import UsageEntry, UsagesTreeResult
-from src.orchestration.usages import run_usages, run_usages_by_id, _build_usages_tree
-from src.db.query_runner import QueryRunner
+from src.orchestration.usages import _build_usages_tree, run_usages
+
 from .conftest import requires_neo4j
 
 
 def _reload_if_empty(conn):
     """Reload test data if the database was cleared by another test."""
+    from src.db.importer import import_edges, import_nodes, parse_sot
     from src.db.schema import ensure_schema
-    from src.db.importer import parse_sot, import_nodes, import_edges
 
     runner = QueryRunner(conn)
     count = runner.execute_count("MATCH (n:Node) RETURN count(n)")
     if count == 0:
         sot_path = (
             Path(__file__).parent.parent.parent
-            / "artifacts" / "kloc-dev" / "context-final" / "sot.json"
+            / "artifacts"
+            / "kloc-dev"
+            / "context-final"
+            / "sot.json"
         )
         ensure_schema(conn)
         nodes, edges = parse_sot(str(sot_path))
@@ -75,8 +79,10 @@ class TestBuildUsagesTreeUnit:
             }
         ]
 
-        with patch("src.orchestration.usages.query_usages_for_node", return_value=mock_edges), \
-             patch("src.orchestration.usages.query_usages_direct", return_value=[]):
+        with (
+            patch("src.orchestration.usages.query_usages_for_node", return_value=mock_edges),
+            patch("src.orchestration.usages.query_usages_direct", return_value=[]),
+        ):
             result = _build_usages_tree(runner, target, depth=1, limit=100)
 
         assert len(result.tree) == 1
@@ -104,8 +110,10 @@ class TestBuildUsagesTreeUnit:
             for i in range(3)
         ]
 
-        with patch("src.orchestration.usages.query_usages_for_node", return_value=mock_edges), \
-             patch("src.orchestration.usages.query_usages_direct", return_value=[]):
+        with (
+            patch("src.orchestration.usages.query_usages_for_node", return_value=mock_edges),
+            patch("src.orchestration.usages.query_usages_direct", return_value=[]),
+        ):
             result = _build_usages_tree(runner, target, depth=1, limit=100)
 
         assert len(result.tree) == 3
@@ -128,8 +136,10 @@ class TestBuildUsagesTreeUnit:
             }
         ]
 
-        with patch("src.orchestration.usages.query_usages_for_node", return_value=mock_edges), \
-             patch("src.orchestration.usages.query_usages_direct", return_value=[]):
+        with (
+            patch("src.orchestration.usages.query_usages_for_node", return_value=mock_edges),
+            patch("src.orchestration.usages.query_usages_direct", return_value=[]),
+        ):
             result = _build_usages_tree(runner, target, depth=1, limit=100)
 
         assert result.tree[0].file == "src/Caller.php"
@@ -152,8 +162,10 @@ class TestBuildUsagesTreeUnit:
             for i in range(10)
         ]
 
-        with patch("src.orchestration.usages.query_usages_for_node", return_value=mock_edges), \
-             patch("src.orchestration.usages.query_usages_direct", return_value=[]):
+        with (
+            patch("src.orchestration.usages.query_usages_for_node", return_value=mock_edges),
+            patch("src.orchestration.usages.query_usages_direct", return_value=[]),
+        ):
             result = _build_usages_tree(runner, target, depth=1, limit=3)
 
         assert len(result.tree) == 3
@@ -183,8 +195,10 @@ class TestBuildUsagesTreeUnit:
             },
         ]
 
-        with patch("src.orchestration.usages.query_usages_for_node", return_value=mock_edges), \
-             patch("src.orchestration.usages.query_usages_direct", return_value=[]):
+        with (
+            patch("src.orchestration.usages.query_usages_for_node", return_value=mock_edges),
+            patch("src.orchestration.usages.query_usages_direct", return_value=[]),
+        ):
             result = _build_usages_tree(runner, target, depth=1, limit=100)
 
         assert len(result.tree) == 1
@@ -207,21 +221,15 @@ class TestRunUsagesUnit:
         runner = MagicMock(spec=QueryRunner)
         target = _make_node()
 
-        with patch("src.orchestration.usages.resolve_symbol", return_value=[target]) as mock_resolve, \
-             patch("src.orchestration.usages._build_usages_tree") as mock_build:
+        with (
+            patch("src.orchestration.usages.resolve_symbol", return_value=[target]) as mock_resolve,
+            patch("src.orchestration.usages._build_usages_tree") as mock_build,
+        ):
             mock_build.return_value = UsagesTreeResult(target=target, max_depth=1, tree=[])
             run_usages(runner, "App\\Entity\\Order")
 
         mock_resolve.assert_called_once_with(runner, "App\\Entity\\Order")
         mock_build.assert_called_once()
-
-    def test_run_usages_by_id_not_found(self):
-        """Raise ValueError when node ID not found."""
-        runner = MagicMock(spec=QueryRunner)
-
-        with patch("src.orchestration.usages.fetch_node", return_value=None):
-            with pytest.raises(ValueError, match="Node not found"):
-                run_usages_by_id(runner, "nonexistent-id")
 
 
 class TestToDict:

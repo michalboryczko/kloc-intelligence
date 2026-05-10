@@ -2,8 +2,8 @@
 
 import logging
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Callable, Optional
 
 from ..db.query_runner import QueryRunner
 from ..db.result_mapper import record_to_node, records_to_nodes
@@ -60,7 +60,7 @@ class Enricher:
         force: bool = False,
         kinds: list[str] | None = None,
         batch_size: int = 10,
-        callback: Optional[Callable[[EnrichmentProgress], None]] = None,
+        callback: Callable[[EnrichmentProgress], None] | None = None,
     ) -> EnrichmentProgress:
         """Batch enrich all Class/Method nodes with explanations and embeddings."""
         self._init_pipelines()
@@ -74,7 +74,7 @@ class Enricher:
             callback(progress)
 
         for i in range(0, len(nodes), batch_size):
-            batch = nodes[i:i + batch_size]
+            batch = nodes[i : i + batch_size]
             for node in batch:
                 try:
                     result = self._enrich_single(node, force)
@@ -194,7 +194,9 @@ class Enricher:
             [{**base_meta, "chunk_index": c.chunk_index} for c in chunks],
         )
         self._code_embed_pipeline.run({"embedder": {"documents": code_docs}})
-        logger.debug("  Code embedding: %d chunk(s) in %.1fs", len(chunks), time.perf_counter() - embed_start)
+        logger.debug(
+            "  Code embedding: %d chunk(s) in %.1fs", len(chunks), time.perf_counter() - embed_start
+        )
 
         # Embed explanation
         explain_start = time.perf_counter()

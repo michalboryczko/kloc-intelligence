@@ -57,9 +57,7 @@ def compare_json(expected: Any, actual: Any, path: str = "$") -> list[FieldDiff]
                 diffs.extend(compare_json(expected[key], actual[key], child_path))
     elif isinstance(expected, list):
         if len(expected) != len(actual):
-            diffs.append(
-                FieldDiff(f"{path}.__len__", len(expected), len(actual), "value_mismatch")
-            )
+            diffs.append(FieldDiff(f"{path}.__len__", len(expected), len(actual), "value_mismatch"))
         for i in range(min(len(expected), len(actual))):
             diffs.extend(compare_json(expected[i], actual[i], f"{path}[{i}]"))
     elif isinstance(expected, float):

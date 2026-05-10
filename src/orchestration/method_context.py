@@ -21,15 +21,15 @@ Key design rules:
 
 from __future__ import annotations
 
-from ..db.query_runner import QueryRunner
+from ..db.queries.context_class import fetch_class_used_by_data
 from ..db.queries.context_method import (
     Q4_TYPE_REFERENCES,
     fetch_method_execution_data,
 )
-from ..db.queries.context_class import fetch_class_used_by_data
+from ..db.query_runner import QueryRunner
 from ..logic.graph_helpers import format_method_fqn
 from ..models.node import NodeData
-from ..models.results import ContextEntry, MemberRef, ArgumentInfo
+from ..models.results import ArgumentInfo, ContextEntry, MemberRef
 from .value_context import resolve_promoted_property_fqn
 
 # Trace source chain for a result Value node
@@ -127,11 +127,15 @@ def _resolve_receiver_identity(
         # No explicit receiver — check if this is an implicit $this call
         if runner and call_id:
             from ..db.queries.context_method import Q5_RECEIVER_CHAIN
+
             # If there's no receiver but it's a method call, it could be self
-            rec = runner.execute_single("""
+            rec = runner.execute_single(
+                """
                 MATCH (call:Node {node_id: $call_id})
                 RETURN call.call_kind AS call_kind
-            """, call_id=call_id)
+            """,
+                call_id=call_id,
+            )
             if rec and rec.get("call_kind") in ("access", "method", "method_static"):
                 return "$this", None, "self", None, None
         return None, None, None, None, None
@@ -149,6 +153,7 @@ def _resolve_receiver_identity(
         # Try to resolve via Q5 to get the property chain
         if runner and call_id:
             from ..db.queries.context_method import Q5_RECEIVER_CHAIN
+
             records = runner.execute(Q5_RECEIVER_CHAIN, call_id=call_id)
             for r in records:
                 prop_fqn = r.get("prop_fqn")
@@ -162,9 +167,7 @@ def _resolve_receiver_identity(
                     # Build expression from source receiver
                     if src_recv_kind == "self" or src_recv_kind is None:
                         chain = f"$this->{member}"
-                    elif src_recv_kind == "parameter":
-                        chain = f"{src_recv_name}->{member}"
-                    elif src_recv_kind == "local":
+                    elif src_recv_kind == "parameter" or src_recv_kind == "local":
                         chain = f"{src_recv_name}->{member}"
                     else:
                         chain = f"$this->{member}"
@@ -308,16 +311,18 @@ def _build_argument_infos(
             if value_node_id:
                 source_chain = _trace_source_chain(runner, value_node_id)
 
-        infos.append(ArgumentInfo(
-            position=int(position),
-            param_name=param_name,
-            param_fqn=param_fqn,
-            value_expr=rec.get("expression"),
-            value_source=value_kind,
-            value_type=rec.get("value_type"),
-            value_ref_symbol=value_ref_symbol,
-            source_chain=source_chain,
-        ))
+        infos.append(
+            ArgumentInfo(
+                position=int(position),
+                param_name=param_name,
+                param_fqn=param_fqn,
+                value_expr=rec.get("expression"),
+                value_source=value_kind,
+                value_type=rec.get("value_type"),
+                value_ref_symbol=value_ref_symbol,
+                source_chain=source_chain,
+            )
+        )
     infos.sort(key=lambda a: a.position)
     return infos
 
@@ -486,9 +491,7 @@ def filter_orphan_property_accesses(entries: list[ContextEntry]) -> list[Context
             if prop_name:
                 access_expr = f"{entry.member_ref.access_chain}->{prop_name}"
                 # Check if this expression appears in any value_expr
-                is_expression_consumed = any(
-                    access_expr in expr for expr in all_value_exprs
-                )
+                is_expression_consumed = any(access_expr in expr for expr in all_value_exprs)
                 if is_expression_consumed:
                     # Orphan: skip this entry
                     continue
@@ -615,15 +618,24 @@ def build_execution_flow(
             # -------------------------------------------------------
             # Build inner source_call entry
             member_ref = _build_member_ref(
-                callee_fqn, callee_name, callee_kind,
-                access_chain, access_chain_symbol, on_kind,
-                call_kind, call_file, call_line,
-                on_file, on_line,
+                callee_fqn,
+                callee_name,
+                callee_kind,
+                access_chain,
+                access_chain_symbol,
+                on_kind,
+                call_kind,
+                call_file,
+                call_line,
+                on_file,
+                on_line,
             )
             source_call_entry = ContextEntry(
                 depth=depth,
                 node_id=call_id,
-                fqn=format_method_fqn(callee_fqn or call_rec.get("call_name") or "", callee_kind or ""),
+                fqn=format_method_fqn(
+                    callee_fqn or call_rec.get("call_name") or "", callee_kind or ""
+                ),
                 kind=callee_kind,
                 file=call_file,
                 line=call_line,
@@ -680,9 +692,14 @@ def build_execution_flow(
                 callee_fqn or call_rec.get("call_name"),
                 callee_name or call_rec.get("call_name"),
                 callee_kind,
-                access_chain, access_chain_symbol, on_kind,
-                call_kind, call_file, call_line,
-                on_file, on_line,
+                access_chain,
+                access_chain_symbol,
+                on_kind,
+                call_kind,
+                call_file,
+                call_line,
+                on_file,
+                on_line,
             )
 
             # For external calls, infer kind from call_kind
@@ -757,8 +774,8 @@ def build_method_used_by(
     Returns:
         Ordered list of ContextEntry objects representing who calls the method.
     """
-    from ..logic.reference_types import infer_reference_type, CHAINABLE_REFERENCE_TYPES
-    from ..logic.handlers import EdgeContext, EntryBucket, USED_BY_HANDLERS
+    from ..logic.handlers import USED_BY_HANDLERS, EdgeContext, EntryBucket
+    from ..logic.reference_types import CHAINABLE_REFERENCE_TYPES, infer_reference_type
     from .class_context import _dict_to_context_entry, build_caller_chain_for_method
 
     data = fetch_class_used_by_data(runner, node.node_id)

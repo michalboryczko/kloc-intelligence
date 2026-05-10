@@ -1,8 +1,8 @@
 """Cypher queries for symbol resolution."""
 
+from ...models.node import NodeData
 from ..query_runner import QueryRunner
 from ..result_mapper import records_to_nodes
-from ...models.node import NodeData
 
 # EXACT FQN: search ALL nodes (no kind filter!)
 # Note: Cypher param named $search_term to avoid collision with neo4j driver's
@@ -21,9 +21,15 @@ RETURN n
 
 # For fuzzy searches, limit to user-visible kinds
 SEARCHABLE_KINDS = [
-    "Class", "Interface", "Trait", "Enum",
-    "Method", "Function",
-    "Property", "Const", "EnumCase",
+    "Class",
+    "Interface",
+    "Trait",
+    "Enum",
+    "Method",
+    "Function",
+    "Property",
+    "Const",
+    "EnumCase",
     "File",
 ]
 

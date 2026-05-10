@@ -5,15 +5,17 @@ import logging
 from haystack import Document, Pipeline
 from haystack.components.builders import ChatPromptBuilder
 from haystack.components.generators.chat import OpenAIChatGenerator
-from ._haystack_compat import (
-    TolerantDocumentEmbedder as OpenAIDocumentEmbedder,
-    TolerantTextEmbedder as OpenAITextEmbedder,
-)
 from haystack.components.writers import DocumentWriter
 from haystack.dataclasses import ChatMessage
 from haystack.utils import Secret
 from haystack_integrations.document_stores.qdrant import QdrantDocumentStore
 
+from ._haystack_compat import (
+    TolerantDocumentEmbedder as OpenAIDocumentEmbedder,
+)
+from ._haystack_compat import (
+    TolerantTextEmbedder as OpenAITextEmbedder,
+)
 from .config import AIConfig
 
 logger = logging.getLogger(__name__)
@@ -129,6 +131,7 @@ Key classes and methods that use this class (first-level dependents):
 
 # ── Qdrant helpers ───────────────────────────────────────────────
 
+
 def _make_qdrant_store(config: AIConfig, collection: str) -> QdrantDocumentStore:
     """Create a QdrantDocumentStore for a given collection."""
     return QdrantDocumentStore(
@@ -142,6 +145,7 @@ def _make_qdrant_store(config: AIConfig, collection: str) -> QdrantDocumentStore
 
 
 # ── Explain pipeline ────────────────────────────────────────────
+
 
 def build_explain_pipeline(config: AIConfig, kind: str = "Method") -> Pipeline:
     """Build pipeline that generates human-language explanation.
@@ -179,6 +183,7 @@ def build_explain_pipeline(config: AIConfig, kind: str = "Method") -> Pipeline:
 def _render_and_log_prompt(template_messages: list[ChatMessage], variables: dict) -> None:
     """Render Jinja2 templates with variables and log the result."""
     from jinja2 import Environment
+
     env = Environment()
     for msg in template_messages:
         role = msg.role.value if hasattr(msg.role, "value") else msg.role
@@ -217,10 +222,17 @@ def run_explain_method(
         "signature": signature or "",
         "type_context": type_context or [],
     }
-    logger.debug("  LLM call: method explain for %s (source=%d chars, type_context=%d)",
-                 fqn, len(source_code), len(type_context or []))
+    logger.debug(
+        "  LLM call: method explain for %s (source=%d chars, type_context=%d)",
+        fqn,
+        len(source_code),
+        len(type_context or []),
+    )
     _render_and_log_prompt(
-        [ChatMessage.from_system(EXPLAIN_SYSTEM_PROMPT), ChatMessage.from_user(EXPLAIN_METHOD_TEMPLATE)],
+        [
+            ChatMessage.from_system(EXPLAIN_SYSTEM_PROMPT),
+            ChatMessage.from_user(EXPLAIN_METHOD_TEMPLATE),
+        ],
         variables,
     )
     result = pipeline.run({"prompt_builder": variables})
@@ -245,10 +257,18 @@ def run_explain_class(
         "parent_context": parent_context or [],
         "usage_context": usage_context or [],
     }
-    logger.debug("  LLM call: class explain for %s (source=%d chars, parents=%d, usages=%d)",
-                 fqn, len(source_code), len(parent_context or []), len(usage_context or []))
+    logger.debug(
+        "  LLM call: class explain for %s (source=%d chars, parents=%d, usages=%d)",
+        fqn,
+        len(source_code),
+        len(parent_context or []),
+        len(usage_context or []),
+    )
     _render_and_log_prompt(
-        [ChatMessage.from_system(EXPLAIN_SYSTEM_PROMPT), ChatMessage.from_user(EXPLAIN_CLASS_TEMPLATE)],
+        [
+            ChatMessage.from_system(EXPLAIN_SYSTEM_PROMPT),
+            ChatMessage.from_user(EXPLAIN_CLASS_TEMPLATE),
+        ],
         variables,
     )
     result = pipeline.run({"prompt_builder": variables})
@@ -256,6 +276,7 @@ def run_explain_class(
 
 
 # ── Embed pipeline ──────────────────────────────────────────────
+
 
 def build_embed_pipeline(config: AIConfig, collection: str) -> Pipeline:
     """Build pipeline that embeds documents and writes to Qdrant."""
@@ -296,6 +317,7 @@ def make_embed_documents(
 
 # ── Search pipeline ─────────────────────────────────────────────
 
+
 def build_search_pipeline(config: AIConfig, collection: str) -> Pipeline:
     """Build pipeline that searches a Qdrant collection."""
     from haystack_integrations.components.retrievers.qdrant import QdrantEmbeddingRetriever
@@ -325,14 +347,18 @@ def run_search(
 ) -> list[dict]:
     """Run search pipeline and return results as dicts."""
     logger.debug("  Search query: '%s' (top_k=%d)", query, top_k)
-    result = pipeline.run({
-        "embedder": {"text": query},
-        "retriever": {"top_k": top_k},
-    })
+    result = pipeline.run(
+        {
+            "embedder": {"text": query},
+            "retriever": {"top_k": top_k},
+        }
+    )
     documents = result.get("retriever", {}).get("documents", [])
     logger.debug("  Search returned %d results", len(documents))
     for doc in documents:
-        logger.debug("    %.3f %s %s", doc.score or 0, doc.meta.get("kind", "?"), doc.meta.get("fqn", "?"))
+        logger.debug(
+            "    %.3f %s %s", doc.score or 0, doc.meta.get("kind", "?"), doc.meta.get("fqn", "?")
+        )
     return [
         {
             "score": doc.score or 0.0,
@@ -403,10 +429,15 @@ def run_explain_flow(
     }
     logger.debug(
         "  LLM call: flow explain for %s (entry_source=%d chars, refs=%d)",
-        flow_name, len(entry_source), len(referenced_chunks or []),
+        flow_name,
+        len(entry_source),
+        len(referenced_chunks or []),
     )
     _render_and_log_prompt(
-        [ChatMessage.from_system(EXPLAIN_FLOW_SYSTEM_PROMPT), ChatMessage.from_user(EXPLAIN_FLOW_TEMPLATE)],
+        [
+            ChatMessage.from_system(EXPLAIN_FLOW_SYSTEM_PROMPT),
+            ChatMessage.from_user(EXPLAIN_FLOW_TEMPLATE),
+        ],
         variables,
     )
     result = pipeline.run({"prompt_builder": variables})

@@ -5,10 +5,11 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from src.db.query_runner import QueryRunner
 from src.models.node import NodeData
 from src.models.results import OwnersResult
-from src.orchestration.simple import run_owners, run_owners_by_id, _build_owners
-from src.db.query_runner import QueryRunner
+from src.orchestration.simple import _build_owners, run_owners
+
 from .conftest import requires_neo4j
 
 
@@ -28,15 +29,18 @@ def _make_node(**overrides) -> NodeData:
 
 def _reload_if_empty(conn):
     """Reload test data if the database was cleared by another test."""
+    from src.db.importer import import_edges, import_nodes, parse_sot
     from src.db.schema import ensure_schema
-    from src.db.importer import parse_sot, import_nodes, import_edges
 
     runner = QueryRunner(conn)
     count = runner.execute_count("MATCH (n:Node) RETURN count(n)")
     if count == 0:
         sot_path = (
             Path(__file__).parent.parent.parent
-            / "artifacts" / "kloc-dev" / "context-final" / "sot.json"
+            / "artifacts"
+            / "kloc-dev"
+            / "context-final"
+            / "sot.json"
         )
         ensure_schema(conn)
         nodes, edges = parse_sot(str(sot_path))
@@ -50,7 +54,9 @@ class TestOwnersUnit:
     def test_single_node_no_parent(self):
         """A File node has no parent — chain is just [File]."""
         file_node = _make_node(
-            node_id="file-1", kind="File", name="Order.php",
+            node_id="file-1",
+            kind="File",
+            name="Order.php",
             fqn="src/Entity/Order.php",
         )
 
@@ -79,8 +85,10 @@ class TestOwnersUnit:
         runner = MagicMock(spec=QueryRunner)
         target = _make_node()
 
-        with patch("src.orchestration.simple.resolve_symbol", return_value=[target]) as mock_resolve, \
-             patch("src.orchestration.simple.get_owners_chain", return_value=[target]):
+        with (
+            patch("src.orchestration.simple.resolve_symbol", return_value=[target]) as mock_resolve,
+            patch("src.orchestration.simple.get_owners_chain", return_value=[target]),
+        ):
             run_owners(runner, "App\\Service\\OrderService::createOrder()")
 
         mock_resolve.assert_called_once_with(runner, "App\\Service\\OrderService::createOrder()")
@@ -92,14 +100,6 @@ class TestOwnersUnit:
         with patch("src.orchestration.simple.resolve_symbol", return_value=[]):
             with pytest.raises(ValueError, match="Symbol not found"):
                 run_owners(runner, "Nonexistent\\Symbol")
-
-    def test_run_owners_by_id_not_found(self):
-        """run_owners_by_id raises ValueError when node not found."""
-        runner = MagicMock(spec=QueryRunner)
-
-        with patch("src.orchestration.simple.fetch_node", return_value=None):
-            with pytest.raises(ValueError, match="Node not found"):
-                run_owners_by_id(runner, "nonexistent-id")
 
 
 class TestOwnersToDict:
@@ -143,9 +143,7 @@ class TestOwnersIntegration:
     def test_method_has_owners(self, loaded_database):
         """A method should have at least a class and file as owners."""
         runner = QueryRunner(loaded_database)
-        result = run_owners(
-            runner, "App\\Service\\OrderService::createOrder()"
-        )
+        result = run_owners(runner, "App\\Service\\OrderService::createOrder()")
         # Chain should have at least 2 elements: method + at least one parent
         assert len(result.chain) >= 2
         # First element is the target method
@@ -164,15 +162,13 @@ class TestOwnersIntegration:
     def test_file_has_self_only(self, loaded_database):
         """A file node's chain is just the file itself."""
         runner = QueryRunner(loaded_database)
-        # Find a file node first
-        file_record = runner.execute_single(
-            "MATCH (n:Node {kind: 'File'}) RETURN n LIMIT 1"
-        )
+        file_record = runner.execute_single("MATCH (n:Node {kind: 'File'}) RETURN n LIMIT 1")
         if file_record is None:
             pytest.skip("No File nodes in database")
         from src.db.result_mapper import record_to_node
+
         file_node = record_to_node(file_record)
-        result = run_owners_by_id(runner, file_node.node_id)
+        result = run_owners(runner, file_node.fqn)
         assert len(result.chain) == 1
         assert result.chain[0].kind == "File"
 

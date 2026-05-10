@@ -21,14 +21,13 @@ from unittest.mock import MagicMock
 from src.models.node import NodeData
 from src.models.results import ContextEntry
 from src.orchestration.interface_context import (
+    USES_PRIORITY,
+    _build_interface_extends_depth2,
+    _check_contract_relevance,
     build_interface_used_by,
     build_interface_uses,
     entry_targets_contract_method,
-    USES_PRIORITY,
-    _check_contract_relevance,
-    _build_interface_extends_depth2,
 )
-
 
 # =============================================================================
 # Fixtures / Factories
@@ -155,25 +154,19 @@ class TestCheckContractRelevance:
     def test_relevant_when_query_returns_true(self):
         runner = make_runner()
         runner.execute.return_value = [{"calls_contract": True}]
-        result = _check_contract_relevance(
-            runner, "p:1", "App\\Svc::$repo", ["save"]
-        )
+        result = _check_contract_relevance(runner, "p:1", "App\\Svc::$repo", ["save"])
         assert result is True
 
     def test_not_relevant_when_query_returns_false(self):
         runner = make_runner()
         runner.execute.return_value = [{"calls_contract": False}]
-        result = _check_contract_relevance(
-            runner, "p:1", "App\\Svc::$repo", ["save"]
-        )
+        result = _check_contract_relevance(runner, "p:1", "App\\Svc::$repo", ["save"])
         assert result is False
 
     def test_not_relevant_when_no_records(self):
         runner = make_runner()
         runner.execute.return_value = []
-        result = _check_contract_relevance(
-            runner, "p:1", "App\\Svc::$repo", ["save"]
-        )
+        result = _check_contract_relevance(runner, "p:1", "App\\Svc::$repo", ["save"])
         assert result is False
 
 
@@ -216,9 +209,7 @@ class TestBuildInterfaceExtendsDepth2:
             ],
             [],  # No extends children
         ]
-        result = _build_interface_extends_depth2(
-            runner, "iface:Child", ["save"], max_depth=2
-        )
+        result = _build_interface_extends_depth2(runner, "iface:Child", ["save"], max_depth=2)
         # Current implementation returns all own methods (no contract filter)
         assert len(result) == 2
         assert result[0].fqn == "App\\ChildIface::save()"
@@ -231,8 +222,22 @@ class TestBuildInterfaceExtendsDepth2:
         # Second call: _Q_EXTENDS_FROM_INTERFACE
         runner.execute.side_effect = [
             [
-                {"id": "m:1", "fqn": "App\\Child::a", "name": "a", "file": None, "start_line": 1, "signature": None},
-                {"id": "m:2", "fqn": "App\\Child::b", "name": "b", "file": None, "start_line": 2, "signature": None},
+                {
+                    "id": "m:1",
+                    "fqn": "App\\Child::a",
+                    "name": "a",
+                    "file": None,
+                    "start_line": 1,
+                    "signature": None,
+                },
+                {
+                    "id": "m:2",
+                    "fqn": "App\\Child::b",
+                    "name": "b",
+                    "file": None,
+                    "start_line": 2,
+                    "signature": None,
+                },
             ],
             [],  # No extends children
         ]
@@ -305,13 +310,15 @@ class TestBuildInterfaceUsedBy:
     def test_single_implementor(self):
         node = make_iface_node()
         runner = self._make_used_by_runner(
-            implementors=[{
-                "id": "cls:DoctrineRepo",
-                "fqn": "App\\Repository\\DoctrineRepository",
-                "kind": "Class",
-                "file": "src/Repository/DoctrineRepository.php",
-                "start_line": 8,
-            }]
+            implementors=[
+                {
+                    "id": "cls:DoctrineRepo",
+                    "fqn": "App\\Repository\\DoctrineRepository",
+                    "kind": "Class",
+                    "file": "src/Repository/DoctrineRepository.php",
+                    "start_line": 8,
+                }
+            ]
         )
         result = build_interface_used_by(runner, node)
         assert len(result) == 1
@@ -324,8 +331,20 @@ class TestBuildInterfaceUsedBy:
         node = make_iface_node()
         runner = self._make_used_by_runner(
             implementors=[
-                {"id": "cls:A", "fqn": "App\\A", "kind": "Class", "file": "src/A.php", "start_line": 1},
-                {"id": "cls:B", "fqn": "App\\B", "kind": "Class", "file": "src/B.php", "start_line": 2},
+                {
+                    "id": "cls:A",
+                    "fqn": "App\\A",
+                    "kind": "Class",
+                    "file": "src/A.php",
+                    "start_line": 1,
+                },
+                {
+                    "id": "cls:B",
+                    "fqn": "App\\B",
+                    "kind": "Class",
+                    "file": "src/B.php",
+                    "start_line": 2,
+                },
             ]
         )
         result = build_interface_used_by(runner, node)
@@ -336,13 +355,15 @@ class TestBuildInterfaceUsedBy:
     def test_extends_children(self):
         node = make_iface_node()
         runner = self._make_used_by_runner(
-            extends_children=[{
-                "id": "iface:Child",
-                "fqn": "App\\ChildInterface",
-                "kind": "Interface",
-                "file": "src/ChildInterface.php",
-                "start_line": 3,
-            }]
+            extends_children=[
+                {
+                    "id": "iface:Child",
+                    "fqn": "App\\ChildInterface",
+                    "kind": "Interface",
+                    "file": "src/ChildInterface.php",
+                    "start_line": 3,
+                }
+            ]
         )
         result = build_interface_used_by(runner, node)
         assert len(result) == 1
@@ -352,9 +373,34 @@ class TestBuildInterfaceUsedBy:
     def test_priority_order_implements_before_extends_before_property_type(self):
         node = make_iface_node()
         runner = self._make_used_by_runner(
-            implementors=[{"id": "cls:Impl", "fqn": "App\\Impl", "kind": "Class", "file": "f.php", "start_line": 1}],
-            extends_children=[{"id": "iface:Child", "fqn": "App\\Child", "kind": "Interface", "file": "g.php", "start_line": 2}],
-            injection_points=[{"prop_id": "p:1", "prop_fqn": "App\\Svc::$repo", "prop_file": "h.php", "prop_start_line": 5, "class_id": "cls:Svc", "class_fqn": "App\\Svc"}],
+            implementors=[
+                {
+                    "id": "cls:Impl",
+                    "fqn": "App\\Impl",
+                    "kind": "Class",
+                    "file": "f.php",
+                    "start_line": 1,
+                }
+            ],
+            extends_children=[
+                {
+                    "id": "iface:Child",
+                    "fqn": "App\\Child",
+                    "kind": "Interface",
+                    "file": "g.php",
+                    "start_line": 2,
+                }
+            ],
+            injection_points=[
+                {
+                    "prop_id": "p:1",
+                    "prop_fqn": "App\\Svc::$repo",
+                    "prop_file": "h.php",
+                    "prop_start_line": 5,
+                    "class_id": "cls:Svc",
+                    "class_fqn": "App\\Svc",
+                }
+            ],
             contract_methods=["save"],
             contract_relevance=True,
         )
@@ -369,7 +415,16 @@ class TestBuildInterfaceUsedBy:
     def test_injection_point_excluded_when_not_relevant(self):
         node = make_iface_node()
         runner = self._make_used_by_runner(
-            injection_points=[{"prop_id": "p:1", "prop_fqn": "App\\Svc::$repo", "prop_file": "h.php", "prop_start_line": 5, "class_id": "cls:Svc", "class_fqn": "App\\Svc"}],
+            injection_points=[
+                {
+                    "prop_id": "p:1",
+                    "prop_fqn": "App\\Svc::$repo",
+                    "prop_file": "h.php",
+                    "prop_start_line": 5,
+                    "class_id": "cls:Svc",
+                    "class_fqn": "App\\Svc",
+                }
+            ],
             contract_methods=["save"],
             contract_relevance=False,
         )
@@ -379,7 +434,16 @@ class TestBuildInterfaceUsedBy:
     def test_injection_point_included_when_relevant(self):
         node = make_iface_node()
         runner = self._make_used_by_runner(
-            injection_points=[{"prop_id": "p:1", "prop_fqn": "App\\Svc::$repo", "prop_file": "h.php", "prop_start_line": 5, "class_id": "cls:Svc", "class_fqn": "App\\Svc"}],
+            injection_points=[
+                {
+                    "prop_id": "p:1",
+                    "prop_fqn": "App\\Svc::$repo",
+                    "prop_file": "h.php",
+                    "prop_start_line": 5,
+                    "class_id": "cls:Svc",
+                    "class_fqn": "App\\Svc",
+                }
+            ],
             contract_methods=["save"],
             contract_relevance=True,
         )
@@ -392,7 +456,13 @@ class TestBuildInterfaceUsedBy:
         node = make_iface_node()
         runner = self._make_used_by_runner(
             implementors=[
-                {"id": f"cls:{i}", "fqn": f"App\\Impl{i}", "kind": "Class", "file": "f.php", "start_line": i}
+                {
+                    "id": f"cls:{i}",
+                    "fqn": f"App\\Impl{i}",
+                    "kind": "Class",
+                    "file": "f.php",
+                    "start_line": i,
+                }
                 for i in range(10)
             ]
         )
@@ -402,7 +472,15 @@ class TestBuildInterfaceUsedBy:
     def test_depth2_implements_override_methods(self):
         node = make_iface_node()
         runner = self._make_used_by_runner(
-            implementors=[{"id": "cls:Impl", "fqn": "App\\Impl", "kind": "Class", "file": "f.php", "start_line": 1}],
+            implementors=[
+                {
+                    "id": "cls:Impl",
+                    "fqn": "App\\Impl",
+                    "kind": "Class",
+                    "file": "f.php",
+                    "start_line": 1,
+                }
+            ],
             contract_methods=["save"],
             impl_depth2_methods=[
                 {
@@ -429,15 +507,37 @@ class TestBuildInterfaceUsedBy:
         """Only methods with overrides_id are included at depth 2."""
         node = make_iface_node()
         runner = self._make_used_by_runner(
-            implementors=[{"id": "cls:Impl", "fqn": "App\\Impl", "kind": "Class", "file": "f.php", "start_line": 1}],
+            implementors=[
+                {
+                    "id": "cls:Impl",
+                    "fqn": "App\\Impl",
+                    "kind": "Class",
+                    "file": "f.php",
+                    "start_line": 1,
+                }
+            ],
             contract_methods=["save"],
             impl_depth2_methods=[
-                {"method_id": "m:save", "method_fqn": "App\\Impl::save", "method_name": "save",
-                 "method_file": "f.php", "method_start_line": 15, "method_signature": None,
-                 "overrides_id": "m:iface_save", "overrides_class_id": "iface:OrderRepo"},
-                {"method_id": "m:helper", "method_fqn": "App\\Impl::helper", "method_name": "helper",
-                 "method_file": "f.php", "method_start_line": 20, "method_signature": None,
-                 "overrides_id": None, "overrides_class_id": None},
+                {
+                    "method_id": "m:save",
+                    "method_fqn": "App\\Impl::save",
+                    "method_name": "save",
+                    "method_file": "f.php",
+                    "method_start_line": 15,
+                    "method_signature": None,
+                    "overrides_id": "m:iface_save",
+                    "overrides_class_id": "iface:OrderRepo",
+                },
+                {
+                    "method_id": "m:helper",
+                    "method_fqn": "App\\Impl::helper",
+                    "method_name": "helper",
+                    "method_file": "f.php",
+                    "method_start_line": 20,
+                    "method_signature": None,
+                    "overrides_id": None,
+                    "overrides_class_id": None,
+                },
             ],
         )
         result = build_interface_used_by(runner, node, max_depth=2)
@@ -449,7 +549,16 @@ class TestBuildInterfaceUsedBy:
     def test_depth2_injection_point_calls(self):
         node = make_iface_node()
         runner = self._make_used_by_runner(
-            injection_points=[{"prop_id": "p:1", "prop_fqn": "App\\Svc::$repo", "prop_file": "h.php", "prop_start_line": 5, "class_id": "cls:Svc", "class_fqn": "App\\Svc"}],
+            injection_points=[
+                {
+                    "prop_id": "p:1",
+                    "prop_fqn": "App\\Svc::$repo",
+                    "prop_file": "h.php",
+                    "prop_start_line": 5,
+                    "class_id": "cls:Svc",
+                    "class_fqn": "App\\Svc",
+                }
+            ],
             contract_methods=["save"],
             contract_relevance=True,
             injection_calls=[
@@ -484,7 +593,16 @@ class TestBuildInterfaceUsedBy:
         """Same callee_id from multiple call sites -> sites array."""
         node = make_iface_node()
         runner = self._make_used_by_runner(
-            injection_points=[{"prop_id": "p:1", "prop_fqn": "App\\Svc::$repo", "prop_file": "h.php", "prop_start_line": 5, "class_id": "cls:Svc", "class_fqn": "App\\Svc"}],
+            injection_points=[
+                {
+                    "prop_id": "p:1",
+                    "prop_fqn": "App\\Svc::$repo",
+                    "prop_file": "h.php",
+                    "prop_start_line": 5,
+                    "class_id": "cls:Svc",
+                    "class_fqn": "App\\Svc",
+                }
+            ],
             contract_methods=["save"],
             contract_relevance=True,
             injection_calls=[
@@ -531,7 +649,16 @@ class TestBuildInterfaceUsedBy:
         """When contract_relevance=False, no property_type entry -> no injection calls."""
         node = make_iface_node()
         runner = self._make_used_by_runner(
-            injection_points=[{"prop_id": "p:1", "prop_fqn": "App\\Svc::$repo", "prop_file": None, "prop_start_line": None, "class_id": "cls:Svc", "class_fqn": "App\\Svc"}],
+            injection_points=[
+                {
+                    "prop_id": "p:1",
+                    "prop_fqn": "App\\Svc::$repo",
+                    "prop_file": None,
+                    "prop_start_line": None,
+                    "class_id": "cls:Svc",
+                    "class_fqn": "App\\Svc",
+                }
+            ],
             contract_methods=["save"],
             contract_relevance=False,
         )
@@ -556,9 +683,9 @@ class TestBuildInterfaceUses:
         runner = MagicMock()
 
         from src.db.queries.context_interface import (
+            Q1_DIRECT_IMPLEMENTORS,
             Q9_SIGNATURE_TYPES,
             Q10_EXTENDS_PARENT,
-            Q1_DIRECT_IMPLEMENTORS,
         )
 
         def execute_side_effect(query, **kwargs):
@@ -583,13 +710,15 @@ class TestBuildInterfaceUses:
     def test_extends_parent(self):
         node = make_iface_node()
         runner = self._make_uses_runner(
-            extends_parent=[{
-                "id": "iface:Base",
-                "fqn": "App\\BaseInterface",
-                "kind": "Interface",
-                "file": "src/BaseInterface.php",
-                "start_line": 2,
-            }]
+            extends_parent=[
+                {
+                    "id": "iface:Base",
+                    "fqn": "App\\BaseInterface",
+                    "kind": "Interface",
+                    "file": "src/BaseInterface.php",
+                    "start_line": 2,
+                }
+            ]
         )
         result = build_interface_uses(runner, node)
         assert len(result) == 1
@@ -599,17 +728,19 @@ class TestBuildInterfaceUses:
     def test_return_type_from_signature(self):
         node = make_iface_node()
         runner = self._make_uses_runner(
-            signature_types=[{
-                "method_id": "m:save",
-                "method_file": "src/RepositoryInterface.php",
-                "method_line": 10,
-                "ret_type_id": "cls:Result",
-                "ret_type_fqn": "App\\Model\\Result",
-                "ret_type_kind": "Class",
-                "param_type_id": None,
-                "param_type_fqn": None,
-                "param_type_kind": None,
-            }]
+            signature_types=[
+                {
+                    "method_id": "m:save",
+                    "method_file": "src/RepositoryInterface.php",
+                    "method_line": 10,
+                    "ret_type_id": "cls:Result",
+                    "ret_type_fqn": "App\\Model\\Result",
+                    "ret_type_kind": "Class",
+                    "param_type_id": None,
+                    "param_type_fqn": None,
+                    "param_type_kind": None,
+                }
+            ]
         )
         result = build_interface_uses(runner, node)
         assert len(result) == 1
@@ -619,17 +750,19 @@ class TestBuildInterfaceUses:
     def test_parameter_type_from_signature(self):
         node = make_iface_node()
         runner = self._make_uses_runner(
-            signature_types=[{
-                "method_id": "m:save",
-                "method_file": "src/RepositoryInterface.php",
-                "method_line": 10,
-                "ret_type_id": None,
-                "ret_type_fqn": None,
-                "ret_type_kind": None,
-                "param_type_id": "cls:Entity",
-                "param_type_fqn": "App\\Model\\Entity",
-                "param_type_kind": "Class",
-            }]
+            signature_types=[
+                {
+                    "method_id": "m:save",
+                    "method_file": "src/RepositoryInterface.php",
+                    "method_line": 10,
+                    "ret_type_id": None,
+                    "ret_type_fqn": None,
+                    "ret_type_kind": None,
+                    "param_type_id": "cls:Entity",
+                    "param_type_fqn": "App\\Model\\Entity",
+                    "param_type_kind": "Class",
+                }
+            ]
         )
         result = build_interface_uses(runner, node)
         assert len(result) == 1
@@ -674,13 +807,15 @@ class TestBuildInterfaceUses:
     def test_include_impl_adds_implementors(self):
         node = make_iface_node()
         runner = self._make_uses_runner(
-            implementors=[{
-                "id": "cls:Impl",
-                "fqn": "App\\Impl",
-                "kind": "Class",
-                "file": "src/Impl.php",
-                "start_line": 5,
-            }]
+            implementors=[
+                {
+                    "id": "cls:Impl",
+                    "fqn": "App\\Impl",
+                    "kind": "Class",
+                    "file": "src/Impl.php",
+                    "start_line": 5,
+                }
+            ]
         )
         result = build_interface_uses(runner, node, include_impl=True)
         assert len(result) == 1
@@ -689,13 +824,15 @@ class TestBuildInterfaceUses:
     def test_include_impl_false_excludes_implementors(self):
         node = make_iface_node()
         runner = self._make_uses_runner(
-            implementors=[{
-                "id": "cls:Impl",
-                "fqn": "App\\Impl",
-                "kind": "Class",
-                "file": "src/Impl.php",
-                "start_line": 5,
-            }]
+            implementors=[
+                {
+                    "id": "cls:Impl",
+                    "fqn": "App\\Impl",
+                    "kind": "Class",
+                    "file": "src/Impl.php",
+                    "start_line": 5,
+                }
+            ]
         )
         result = build_interface_uses(runner, node, include_impl=False)
         assert result == []
@@ -704,19 +841,37 @@ class TestBuildInterfaceUses:
         """extends comes before implements, implements before parameter_type/return_type."""
         node = make_iface_node()
         runner = self._make_uses_runner(
-            extends_parent=[{"id": "iface:Base", "fqn": "App\\Base", "kind": "Interface", "file": None, "start_line": None}],
-            signature_types=[{
-                "method_id": "m:1",
-                "method_file": None,
-                "method_line": 10,
-                "ret_type_id": "cls:R",
-                "ret_type_fqn": "App\\R",
-                "ret_type_kind": "Class",
-                "param_type_id": "cls:P",
-                "param_type_fqn": "App\\P",
-                "param_type_kind": "Class",
-            }],
-            implementors=[{"id": "cls:Impl", "fqn": "App\\Impl", "kind": "Class", "file": None, "start_line": None}],
+            extends_parent=[
+                {
+                    "id": "iface:Base",
+                    "fqn": "App\\Base",
+                    "kind": "Interface",
+                    "file": None,
+                    "start_line": None,
+                }
+            ],
+            signature_types=[
+                {
+                    "method_id": "m:1",
+                    "method_file": None,
+                    "method_line": 10,
+                    "ret_type_id": "cls:R",
+                    "ret_type_fqn": "App\\R",
+                    "ret_type_kind": "Class",
+                    "param_type_id": "cls:P",
+                    "param_type_fqn": "App\\P",
+                    "param_type_kind": "Class",
+                }
+            ],
+            implementors=[
+                {
+                    "id": "cls:Impl",
+                    "fqn": "App\\Impl",
+                    "kind": "Class",
+                    "file": None,
+                    "start_line": None,
+                }
+            ],
         )
         result = build_interface_uses(runner, node, include_impl=True)
         ref_types = [e.ref_type for e in result]
@@ -754,17 +909,19 @@ class TestBuildInterfaceUses:
         """Records with None ret_type_id/param_type_id should be skipped."""
         node = make_iface_node()
         runner = self._make_uses_runner(
-            signature_types=[{
-                "method_id": "m:1",
-                "method_file": None,
-                "method_line": None,
-                "ret_type_id": None,
-                "ret_type_fqn": None,
-                "ret_type_kind": None,
-                "param_type_id": None,
-                "param_type_fqn": None,
-                "param_type_kind": None,
-            }]
+            signature_types=[
+                {
+                    "method_id": "m:1",
+                    "method_file": None,
+                    "method_line": None,
+                    "ret_type_id": None,
+                    "ret_type_fqn": None,
+                    "ret_type_kind": None,
+                    "param_type_id": None,
+                    "param_type_fqn": None,
+                    "param_type_kind": None,
+                }
+            ]
         )
         result = build_interface_uses(runner, node)
         assert result == []

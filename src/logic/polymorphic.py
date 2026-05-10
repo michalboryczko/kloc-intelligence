@@ -11,7 +11,7 @@ Key design rules:
 
 from __future__ import annotations
 
-from typing import Callable
+from collections.abc import Callable
 
 from ..db.query_runner import QueryRunner
 from ..models.results import ContextEntry
@@ -173,11 +173,9 @@ def get_implementations_for_node(
         # Interface method implementations: find classes implementing an
         # interface that declares a method with the same name, then look up
         # that method in implementing classes.
-        iface_impl_records = list(runner.execute(
-            _Q_CONCRETE_IMPLEMENTORS_DIRECT, method_id=node_id
-        )) + list(runner.execute(
-            _Q_CONCRETE_IMPLEMENTORS_TRANSITIVE, method_id=node_id
-        ))
+        iface_impl_records = list(
+            runner.execute(_Q_CONCRETE_IMPLEMENTORS_DIRECT, method_id=node_id)
+        ) + list(runner.execute(_Q_CONCRETE_IMPLEMENTORS_TRANSITIVE, method_id=node_id))
         for r in iface_impl_records:
             if count[0] >= limit:
                 break

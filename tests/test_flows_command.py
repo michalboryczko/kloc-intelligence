@@ -27,15 +27,12 @@ from src.db.queries.flows import find_flow, get_flow_detail, list_flows
 
 from .conftest import requires_neo4j
 
-
 REFERENCE_FIXTURE = Path(
     "/Users/michal/dev/ai/kloc/kloc-reference-project-php/.kloc/symfony-kloc.json"
 )
 ORDER_CREATE_FLOW_ID = "flow:http:App\\Ui\\Rest\\Controller\\OrderController::create"
 ORDER_GET_FLOW_ID = "flow:http:App\\Ui\\Rest\\Controller\\OrderController::get"
-ORDER_HANDLER_FLOW_ID = (
-    "flow:message:App\\Ui\\Messenger\\Handler\\OrderCreatedHandler::__invoke"
-)
+ORDER_HANDLER_FLOW_ID = "flow:message:App\\Ui\\Messenger\\Handler\\OrderCreatedHandler::__invoke"
 
 
 @pytest.fixture(scope="module")

@@ -1,7 +1,7 @@
 """Generic query runner for Neo4j Cypher queries."""
 
-import time
 import logging
+import time
 from typing import Any
 
 from neo4j import Record

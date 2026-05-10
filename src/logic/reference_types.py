@@ -13,7 +13,13 @@ pre-fetched type_hint data from Neo4j.
 # Structural/declarative references (type_hint, extends, implements, use_trait)
 # are leaf nodes -- they do not imply that callers of the source are callers
 # of the target.
-CHAINABLE_REFERENCE_TYPES = {"method_call", "property_access", "instantiation", "static_call", "caller"}
+CHAINABLE_REFERENCE_TYPES = {
+    "method_call",
+    "property_access",
+    "instantiation",
+    "static_call",
+    "caller",
+}
 
 
 # Reference type priority for sorting USED BY entries

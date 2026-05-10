@@ -17,18 +17,21 @@ and implementations modules.
 
 from __future__ import annotations
 
-from ..db.query_runner import QueryRunner
-from ..db.queries.resolve import resolve_symbol
 from ..db.queries.definition import fetch_definition_data
+from ..db.queries.resolve import resolve_symbol
+from ..db.query_runner import QueryRunner
 from ..logic.definition import build_definition
+from ..logic.polymorphic import (
+    get_concrete_implementors,
+)
 from ..models.node import NodeData
-from ..models.results import ContextResult, ContextEntry
-
+from ..models.results import ContextEntry, ContextResult
 from .class_context import (
+    build_caller_chain_for_method,
     build_class_used_by,
     build_class_uses,
-    build_caller_chain_for_method,
 )
+from .generic_context import build_generic_used_by
 from .interface_context import (
     build_interface_used_by,
     build_interface_uses,
@@ -37,19 +40,14 @@ from .method_context import (
     build_execution_flow,
     get_type_references,
 )
-from .generic_context import build_generic_used_by
-from .value_context import (
-    build_value_consumer_chain,
-    build_value_source_chain,
-)
 from .property_context import (
     build_property_used_by,
     build_property_uses,
 )
-from ..logic.polymorphic import (
-    get_concrete_implementors,
+from .value_context import (
+    build_value_consumer_chain,
+    build_value_source_chain,
 )
-
 
 # ========================================================================
 # Containing class resolution (ISSUE-A: constructor redirect)
@@ -69,6 +67,7 @@ RETURN n
 def _fetch_node(runner: QueryRunner, node_id: str) -> NodeData | None:
     """Fetch a single NodeData by node_id from Neo4j."""
     from ..db.result_mapper import record_to_node
+
     record = runner.execute_single(_Q_NODE_BY_ID, node_id=node_id)
     if record and record["n"]:
         return record_to_node(record)
@@ -122,9 +121,7 @@ def execute_context(
     )
 
     # 4. Build USES tree
-    uses = _build_outgoing_tree(
-        runner, target, depth, limit, include_impl
-    )
+    uses = _build_outgoing_tree(runner, target, depth, limit, include_impl)
 
     return ContextResult(
         target=target,
@@ -183,18 +180,14 @@ def _build_incoming_tree(
 
     # ISSUE-A: Constructor redirect
     if kind == "Method" and target.name == "__construct":
-        parent_rec = runner.execute_single(
-            _Q_CONTAINING_CLASS, method_id=target.node_id
-        )
+        parent_rec = runner.execute_single(_Q_CONTAINING_CLASS, method_id=target.node_id)
         if parent_rec:
             parent_id = parent_rec["id"]
             parent_kind = parent_rec["kind"]
             if parent_kind in ("Class", "Enum"):
                 parent_node = _fetch_node(runner, parent_id)
                 if parent_node:
-                    return build_class_used_by(
-                        runner, parent_node, max_depth, limit
-                    )
+                    return build_class_used_by(runner, parent_node, max_depth, limit)
 
     # Method / Function: generic USED BY (method-level format with member_ref)
     if kind in ("Method", "Function"):
@@ -225,14 +218,17 @@ def _build_outgoing_tree(
         count: list[int] = [0]
 
         # Get structural type references
-        type_entries = get_type_references(
-            runner, target.node_id, 1, cycle_guard, count, limit
-        )
+        type_entries = get_type_references(runner, target.node_id, 1, cycle_guard, count, limit)
 
         # Get execution flow
         call_entries = build_execution_flow(
-            runner, target.node_id, 1, max_depth, limit,
-            cycle_guard, count,
+            runner,
+            target.node_id,
+            1,
+            max_depth,
+            limit,
+            cycle_guard,
+            count,
         )
 
         # Interface -> concrete direction for USES
@@ -249,8 +245,13 @@ def _build_outgoing_tree(
                     runner, concrete_id, 1, impl_cycle_guard, impl_count, limit
                 )
                 impl_call_entries = build_execution_flow(
-                    runner, concrete_id, 1, max_depth, limit,
-                    impl_cycle_guard, impl_count,
+                    runner,
+                    concrete_id,
+                    1,
+                    max_depth,
+                    limit,
+                    impl_cycle_guard,
+                    impl_count,
                 )
                 impl_children = impl_type_entries + impl_call_entries
                 concrete_fqn = concrete_node.fqn
@@ -273,9 +274,7 @@ def _build_outgoing_tree(
 
     # Value nodes: source chain
     if kind == "Value":
-        return build_value_source_chain(
-            runner, target.node_id, 1, max_depth, limit, visited=set()
-        )
+        return build_value_source_chain(runner, target.node_id, 1, max_depth, limit, visited=set())
 
     # Property nodes: property USES
     if kind == "Property":
@@ -295,9 +294,7 @@ def _build_outgoing_tree(
 
     # Interface nodes: interface USES
     if kind == "Interface":
-        return build_interface_uses(
-            runner, target, max_depth, limit, include_impl
-        )
+        return build_interface_uses(runner, target, max_depth, limit, include_impl)
 
     # Generic fallback: empty for now
     return []

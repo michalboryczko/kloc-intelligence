@@ -1,8 +1,8 @@
 """Cypher queries and execution functions for usages (incoming USES edges)."""
 
+from ...models.node import NodeData
 from ..query_runner import QueryRunner
 from ..result_mapper import record_to_node
-from ...models.node import NodeData
 
 # Container kinds that support member expansion
 CONTAINER_KINDS = ("Class", "Interface", "Trait", "Enum", "File")
@@ -52,20 +52,20 @@ def query_usages_direct(runner: QueryRunner, node_id: str) -> list[dict]:
     results = []
     for record in records:
         source = record["source"]
-        results.append({
-            "source_id": source["node_id"],
-            "source_fqn": source["fqn"],
-            "loc_file": record["loc_file"],
-            "loc_line": record["loc_line"],
-            "source_file": source.get("file"),
-            "source_start_line": source.get("start_line"),
-        })
+        results.append(
+            {
+                "source_id": source["node_id"],
+                "source_fqn": source["fqn"],
+                "loc_file": record["loc_file"],
+                "loc_line": record["loc_line"],
+                "source_file": source.get("file"),
+                "source_start_line": source.get("start_line"),
+            }
+        )
     return results
 
 
-def query_usages_with_members(
-    runner: QueryRunner, node_id: str, limit: int = 100
-) -> list[dict]:
+def query_usages_with_members(runner: QueryRunner, node_id: str, limit: int = 100) -> list[dict]:
     """Query usages including member expansion for container nodes.
 
     Returns list of dicts with keys: source_id, source_fqn, loc_file, loc_line,
@@ -85,14 +85,16 @@ def query_usages_with_members(
         if source_id in seen_sources:
             continue
         seen_sources.add(source_id)
-        results.append({
-            "source_id": source_id,
-            "source_fqn": source["fqn"],
-            "loc_file": record["loc_file"],
-            "loc_line": record["loc_line"],
-            "source_file": source.get("file"),
-            "source_start_line": source.get("start_line"),
-        })
+        results.append(
+            {
+                "source_id": source_id,
+                "source_fqn": source["fqn"],
+                "loc_file": record["loc_file"],
+                "loc_line": record["loc_line"],
+                "source_file": source.get("file"),
+                "source_start_line": source.get("start_line"),
+            }
+        )
     return results
 
 

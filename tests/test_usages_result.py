@@ -2,10 +2,10 @@
 
 from src.models.node import NodeData
 from src.models.results import (
-    UsageEntry,
-    UsagesTreeResult,
     DepsEntry,
     DepsTreeResult,
+    UsageEntry,
+    UsagesTreeResult,
 )
 
 
@@ -63,7 +63,11 @@ class TestUsageEntry:
     def test_to_dict_with_children(self):
         child = UsageEntry(depth=2, node_id="s2", fqn="Bar", file="b.php", line=5)
         parent = UsageEntry(
-            depth=1, node_id="s1", fqn="Foo", file="f.php", line=10,
+            depth=1,
+            node_id="s1",
+            fqn="Foo",
+            file="f.php",
+            line=10,
             children=[child],
         )
         d = parent.to_dict()

@@ -2,7 +2,6 @@
 
 import re
 from pathlib import Path
-from typing import Optional
 
 import msgspec
 
@@ -10,10 +9,10 @@ from .connection import Neo4jConnection
 
 # Regex for signature extraction (ported from kloc-cli/src/graph/loader.py)
 _RE_VISIBILITY = re.compile(
-    r'^(?:public\s+|protected\s+|private\s+|static\s+|final\s+|abstract\s+)*function\s+'
+    r"^(?:public\s+|protected\s+|private\s+|static\s+|final\s+|abstract\s+)*function\s+"
 )
-_RE_ATTRIBUTES = re.compile(r'#\[[^\]]*\]\s*')
-_RE_WHITESPACE = re.compile(r'\s+')
+_RE_ATTRIBUTES = re.compile(r"#\[[^\]]*\]\s*")
+_RE_WHITESPACE = re.compile(r"\s+")
 
 BATCH_SIZE = 5000
 
@@ -63,7 +62,7 @@ class RangeSpec(msgspec.Struct, omit_defaults=True):
 class LocationSpec(msgspec.Struct, omit_defaults=True):
     file: str
     line: int
-    col: Optional[int] = None
+    col: int | None = None
 
 
 class NodeSpec(msgspec.Struct, omit_defaults=True):
@@ -72,23 +71,23 @@ class NodeSpec(msgspec.Struct, omit_defaults=True):
     name: str
     fqn: str
     symbol: str
-    file: Optional[str] = None
-    range: Optional[dict] = None
+    file: str | None = None
+    range: dict | None = None
     documentation: list[str] = []
-    value_kind: Optional[str] = None
-    type_symbol: Optional[str] = None
-    call_kind: Optional[str] = None
-    enclosing_range: Optional[dict] = None
+    value_kind: str | None = None
+    type_symbol: str | None = None
+    call_kind: str | None = None
+    enclosing_range: dict | None = None
 
 
 class EdgeSpec(msgspec.Struct, omit_defaults=True):
     type: str
     source: str
     target: str
-    location: Optional[dict] = None
-    position: Optional[int] = None
-    expression: Optional[str] = None
-    parameter: Optional[str] = None
+    location: dict | None = None
+    position: int | None = None
+    expression: str | None = None
+    parameter: str | None = None
 
 
 class SoTSpec(msgspec.Struct, omit_defaults=True):
@@ -110,7 +109,7 @@ def load_sot(path: str | Path) -> SoTSpec:
 # --- Signature extraction (ported from kloc-cli/src/graph/loader.py) ---
 
 
-def extract_signature(node: NodeSpec) -> Optional[str]:
+def extract_signature(node: NodeSpec) -> str | None:
     """Extract method/function signature from documentation."""
     if not node.documentation or node.kind not in ("Method", "Function"):
         return None
@@ -130,9 +129,9 @@ def extract_signature(node: NodeSpec) -> Optional[str]:
             if not sig_lines:
                 continue
             full_sig = " ".join(sig_lines)
-            full_sig = _RE_VISIBILITY.sub('', full_sig)
-            full_sig = _RE_ATTRIBUTES.sub('', full_sig)
-            full_sig = _RE_WHITESPACE.sub(' ', full_sig).strip()
+            full_sig = _RE_VISIBILITY.sub("", full_sig)
+            full_sig = _RE_ATTRIBUTES.sub("", full_sig)
+            full_sig = _RE_WHITESPACE.sub(" ", full_sig).strip()
             if "(" in full_sig and ")" in full_sig:
                 return full_sig
             if "(" in full_sig:
@@ -228,8 +227,9 @@ def parse_sot(sot_path: str | Path) -> tuple[list[dict], list[dict]]:
 # --- Batch import ---
 
 
-def import_nodes(connection: Neo4jConnection, nodes: list[dict],
-                 batch_size: int = BATCH_SIZE) -> int:
+def import_nodes(
+    connection: Neo4jConnection, nodes: list[dict], batch_size: int = BATCH_SIZE
+) -> int:
     """Import nodes into Neo4j with kind-specific labels, in batches."""
     by_kind: dict[str, list[dict]] = {}
     for node in nodes:
@@ -239,15 +239,16 @@ def import_nodes(connection: Neo4jConnection, nodes: list[dict],
         label = KIND_TO_LABEL.get(kind, kind)
         query = f"UNWIND $batch AS props CREATE (n:Node:{label}) SET n = props"
         for i in range(0, len(kind_nodes), batch_size):
-            batch = kind_nodes[i:i + batch_size]
+            batch = kind_nodes[i : i + batch_size]
             with connection.session() as session:
                 session.run(query, batch=batch)
             total += len(batch)
     return total
 
 
-def import_edges(connection: Neo4jConnection, edges: list[dict],
-                 batch_size: int = BATCH_SIZE) -> int:
+def import_edges(
+    connection: Neo4jConnection, edges: list[dict], batch_size: int = BATCH_SIZE
+) -> int:
     """Import edges into Neo4j as typed relationships, in batches."""
     by_type: dict[str, list[dict]] = {}
     for edge in edges:
@@ -268,7 +269,7 @@ def import_edges(connection: Neo4jConnection, edges: list[dict],
             r.ordinal = props.ordinal
         """
         for i in range(0, len(type_edges), batch_size):
-            batch = type_edges[i:i + batch_size]
+            batch = type_edges[i : i + batch_size]
             with connection.session() as session:
                 session.run(query, batch=batch)
             total += len(batch)
@@ -282,22 +283,17 @@ class ImportValidationError(Exception):
     pass
 
 
-def validate_import(connection: Neo4jConnection, expected_nodes: int,
-                    expected_edges: int) -> dict:
+def validate_import(connection: Neo4jConnection, expected_nodes: int, expected_edges: int) -> dict:
     """Validate that the import produced the expected counts."""
     with connection.session() as session:
-        node_count = session.run(
-            "MATCH (n:Node) RETURN count(n) AS cnt"
-        ).single()["cnt"]
+        node_count = session.run("MATCH (n:Node) RETURN count(n) AS cnt").single()["cnt"]
         kind_counts = {
             row["kind"]: row["cnt"]
             for row in session.run(
                 "MATCH (n:Node) RETURN n.kind AS kind, count(n) AS cnt ORDER BY cnt DESC"
             )
         }
-        edge_count = session.run(
-            "MATCH ()-[r]->() RETURN count(r) AS cnt"
-        ).single()["cnt"]
+        edge_count = session.run("MATCH ()-[r]->() RETURN count(r) AS cnt").single()["cnt"]
         type_counts = {
             row["type"]: row["cnt"]
             for row in session.run(

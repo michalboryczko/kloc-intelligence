@@ -10,8 +10,8 @@ from pathlib import Path
 
 import pytest
 
-from src.db.connection import Neo4jConnection
 from src.config import Neo4jConfig
+from src.db.connection import Neo4jConnection
 from src.db.flow_importer import (
     clear_flows,
     import_flow_edges,
@@ -22,7 +22,6 @@ from src.db.flow_importer import (
 from src.server.mcp import MCPServer
 
 from .conftest import requires_neo4j
-
 
 REMOVED_TOOLS = ["kloc_explain_flow", "kloc_flow_diagram"]
 KEPT_TOOL = "kloc_import_flows"

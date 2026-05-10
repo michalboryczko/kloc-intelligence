@@ -12,8 +12,8 @@ from pathlib import Path
 
 import pytest
 
-from tests.snapshot_compare import compare_snapshot, format_diff_report
 from tests.conftest import requires_neo4j
+from tests.snapshot_compare import compare_snapshot, format_diff_report
 
 # Paths relative to kloc monorepo root
 KLOC_ROOT = Path(__file__).parent.parent.parent
@@ -57,13 +57,11 @@ def execute_context_query(connection, symbol: str, depth: int, impl: bool) -> di
         Dict matching the kloc-cli context JSON format.
     """
     from src.db.query_runner import QueryRunner
-    from src.orchestration.context import execute_context
     from src.models.output import ContextOutput
+    from src.orchestration.context import execute_context
 
     runner = QueryRunner(connection)
-    result = execute_context(
-        runner, symbol, depth=depth, limit=100, include_impl=impl
-    )
+    result = execute_context(runner, symbol, depth=depth, limit=100, include_impl=impl)
     output = ContextOutput.from_result(result)
     return output.to_dict()
 
@@ -86,9 +84,7 @@ class TestContextSnapshots:
         impl = case.get("impl", False)
 
         # Verify this case has expected output
-        assert case_name in _SNAPSHOT, (
-            f"Case '{case_name}' not found in snapshot baseline"
-        )
+        assert case_name in _SNAPSHOT, f"Case '{case_name}' not found in snapshot baseline"
         expected = _SNAPSHOT[case_name]
 
         # Execute the query

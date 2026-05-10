@@ -1,8 +1,10 @@
 """Tests for Neo4jConnection."""
 
 import pytest
+
 from src.config import Neo4jConfig
 from src.db.connection import Neo4jConnection, Neo4jConnectionError
+
 from .conftest import requires_neo4j
 
 

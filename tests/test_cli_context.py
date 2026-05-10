@@ -12,13 +12,12 @@ from src.models.results import (
     DefinitionInfo,
 )
 from src.output.console import (
-    print_context_tree,
-    context_tree_to_dict,
-    print_definition_section,
     _format_entry_name,
+    context_tree_to_dict,
+    print_context_tree,
+    print_definition_section,
 )
 from src.server.mcp import MCPServer
-
 
 # ========================================================================
 # Helpers
@@ -55,7 +54,10 @@ def _make_method_node(**overrides) -> NodeData:
 
 
 def _make_context_result(
-    target=None, used_by=None, uses=None, definition=None,
+    target=None,
+    used_by=None,
+    uses=None,
+    definition=None,
 ) -> ContextResult:
     return ContextResult(
         target=target or _make_node(),
@@ -321,14 +323,18 @@ class TestMCPServerInit:
 class TestMCPServerTools:
     """Tests for MCP server tool listing."""
 
-    @pytest.mark.skip(reason="Stale: hardcoded count from initial commit. MCP tool list has grown beyond 8 (currently 14). See tests/test_mcp_tools.py for current flow-aware tool assertions.")
+    @pytest.mark.skip(
+        reason="Stale: hardcoded count from initial commit. MCP tool list has grown beyond 8 (currently 14). See tests/test_mcp_tools.py for current flow-aware tool assertions."
+    )
     def test_get_tools_returns_8(self):
         """get_tools returns 8 tools."""
         server = MCPServer(database="neo4j")
         tools = server.get_tools()
         assert len(tools) == 8
 
-    @pytest.mark.skip(reason="Stale: hardcoded 8-tool name set from initial commit. The MCP tool list has grown (kloc_explain, kloc_search, kloc_enrich, kloc_import_flows, kloc_source, kloc_chunks added since). See tests/test_mcp_tools.py for current flow-aware tool assertions.")
+    @pytest.mark.skip(
+        reason="Stale: hardcoded 8-tool name set from initial commit. The MCP tool list has grown (kloc_explain, kloc_search, kloc_enrich, kloc_import_flows, kloc_source, kloc_chunks added since). See tests/test_mcp_tools.py for current flow-aware tool assertions."
+    )
     def test_tool_names(self):
         """All expected tool names are present."""
         server = MCPServer(database="neo4j")

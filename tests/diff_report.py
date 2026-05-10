@@ -46,13 +46,11 @@ def load_snapshot() -> dict:
 def execute_context_query(connection, symbol: str, depth: int, impl: bool) -> dict:
     """Execute a context query against Neo4j and return dict output."""
     from src.db.query_runner import QueryRunner
-    from src.orchestration.context import execute_context
     from src.models.output import ContextOutput
+    from src.orchestration.context import execute_context
 
     runner = QueryRunner(connection)
-    result = execute_context(
-        runner, symbol, depth=depth, limit=100, include_impl=impl
-    )
+    result = execute_context(runner, symbol, depth=depth, limit=100, include_impl=impl)
     output = ContextOutput.from_result(result)
     return output.to_dict()
 
@@ -64,10 +62,18 @@ def compare_json(expected, actual, path: str = "$") -> list[dict]:
     if type(expected) is not type(actual):
         if isinstance(expected, (int, float)) and isinstance(actual, (int, float)):
             if abs(float(expected) - float(actual)) > 1e-6:
-                diffs.append({"path": path, "type": "value", "expected": expected, "actual": actual})
+                diffs.append(
+                    {"path": path, "type": "value", "expected": expected, "actual": actual}
+                )
             return diffs
-        diffs.append({"path": path, "type": "type", "expected": type(expected).__name__,
-                       "actual": type(actual).__name__})
+        diffs.append(
+            {
+                "path": path,
+                "type": "type",
+                "expected": type(expected).__name__,
+                "actual": type(actual).__name__,
+            }
+        )
         return diffs
 
     if isinstance(expected, dict):
@@ -77,13 +83,21 @@ def compare_json(expected, actual, path: str = "$") -> list[dict]:
             if key not in expected:
                 diffs.append({"path": child, "type": "extra", "actual": repr(actual[key])[:60]})
             elif key not in actual:
-                diffs.append({"path": child, "type": "missing", "expected": repr(expected[key])[:60]})
+                diffs.append(
+                    {"path": child, "type": "missing", "expected": repr(expected[key])[:60]}
+                )
             else:
                 diffs.extend(compare_json(expected[key], actual[key], child))
     elif isinstance(expected, list):
         if len(expected) != len(actual):
-            diffs.append({"path": f"{path}.__len__", "type": "value",
-                          "expected": len(expected), "actual": len(actual)})
+            diffs.append(
+                {
+                    "path": f"{path}.__len__",
+                    "type": "value",
+                    "expected": len(expected),
+                    "actual": len(actual),
+                }
+            )
         for i in range(min(len(expected), len(actual))):
             diffs.extend(compare_json(expected[i], actual[i], f"{path}[{i}]"))
     elif isinstance(expected, float):
@@ -104,12 +118,15 @@ def format_diff(diff: dict) -> str:
     elif diff["type"] == "type":
         return f"  TYPE    {diff['path']}: expected {diff['expected']}, got {diff['actual']}"
     else:
-        return (f"  DIFF    {diff['path']}: "
-                f"expected {repr(diff['expected'])[:40]}, got {repr(diff['actual'])[:40]}")
+        return (
+            f"  DIFF    {diff['path']}: "
+            f"expected {repr(diff['expected'])[:40]}, got {repr(diff['actual'])[:40]}"
+        )
 
 
-def run_report(cases: list[dict], snapshot: dict, connection,
-               summary_only: bool = False) -> tuple[int, int]:
+def run_report(
+    cases: list[dict], snapshot: dict, connection, summary_only: bool = False
+) -> tuple[int, int]:
     """Run all cases and produce a diff report.
 
     Returns (pass_count, fail_count).
@@ -152,7 +169,9 @@ def run_report(cases: list[dict], snapshot: dict, connection,
                         print(f"    ... and {len(diffs) - 5} more diffs")
         except Exception as e:
             failed += 1
-            failures.append((name, [{"path": "$", "type": "error", "expected": "", "actual": str(e)}]))
+            failures.append(
+                (name, [{"path": "$", "type": "error", "expected": "", "actual": str(e)}])
+            )
             if not summary_only:
                 print(f"  [{i:2d}/{total}] {name}: ERROR ({e})")
 

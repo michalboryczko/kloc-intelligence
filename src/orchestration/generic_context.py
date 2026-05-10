@@ -17,7 +17,7 @@ from __future__ import annotations
 from ..db.query_runner import QueryRunner
 from ..logic.reference_types import CHAINABLE_REFERENCE_TYPES
 from ..models.node import NodeData
-from ..models.results import ContextEntry, MemberRef, ArgumentInfo
+from ..models.results import ArgumentInfo, ContextEntry, MemberRef
 
 # =============================================================================
 # Cypher queries for generic USED BY
@@ -302,23 +302,23 @@ def _build_argument_info(runner: QueryRunner, call_id: str) -> list[ArgumentInfo
             if value_node_id:
                 source_chain = _trace_source_chain(runner, value_node_id)
 
-        infos.append(ArgumentInfo(
-            position=int(position),
-            param_name=param_name,
-            param_fqn=param_fqn,
-            value_expr=r.get("expression"),
-            value_source=value_kind,
-            value_type=r.get("value_type"),
-            value_ref_symbol=value_ref_symbol,
-            source_chain=source_chain,
-        ))
+        infos.append(
+            ArgumentInfo(
+                position=int(position),
+                param_name=param_name,
+                param_fqn=param_fqn,
+                value_expr=r.get("expression"),
+                value_source=value_kind,
+                value_type=r.get("value_type"),
+                value_ref_symbol=value_ref_symbol,
+                source_chain=source_chain,
+            )
+        )
     infos.sort(key=lambda a: a.position)
     return infos
 
 
-def _build_access_chain(
-    runner: QueryRunner, call_id: str
-) -> tuple[str | None, str | None]:
+def _build_access_chain(runner: QueryRunner, call_id: str) -> tuple[str | None, str | None]:
     """Build access chain and access chain symbol from a Call node's receiver.
 
     Resolves the receiver chain by following:
@@ -361,9 +361,7 @@ def _build_access_chain(
             # Determine the source receiver
             if src_recv_value_kind == "self" or src_recv_value_kind is None:
                 chain = f"$this->{member_name}"
-            elif src_recv_value_kind == "parameter":
-                chain = f"{src_recv_name}->{member_name}"
-            elif src_recv_value_kind == "local":
+            elif src_recv_value_kind == "parameter" or src_recv_value_kind == "local":
                 chain = f"{src_recv_name}->{member_name}"
             else:
                 chain = f"$this->{member_name}"
@@ -373,9 +371,7 @@ def _build_access_chain(
             member_name = prop_name
             if src_recv_value_kind == "self" or src_recv_value_kind is None:
                 chain = f"$this->{member_name}()"
-            elif src_recv_value_kind == "parameter":
-                chain = f"{src_recv_name}->{member_name}()"
-            elif src_recv_value_kind == "local":
+            elif src_recv_value_kind == "parameter" or src_recv_value_kind == "local":
                 chain = f"{src_recv_name}->{member_name}()"
             else:
                 chain = f"$this->{member_name}()"
@@ -489,14 +485,14 @@ def build_generic_used_by(
                     # Resolve reference type from Call node's call_kind
                     reference_type = _resolve_reference_type(
                         r.get("edge_type", "USES"),
-                        call_kind, callee_kind, source_kind,
+                        call_kind,
+                        callee_kind,
+                        source_kind,
                     )
 
                     # Resolve access_chain and access_chain_symbol from receiver
                     if call_id:
-                        access_chain, access_chain_symbol = _build_access_chain(
-                            runner, call_id
-                        )
+                        access_chain, access_chain_symbol = _build_access_chain(runner, call_id)
 
                     # Build arguments
                     if call_id:
@@ -564,9 +560,7 @@ def build_generic_used_by(
             entries.append(entry)
 
         # R2: Sort by (file, line)
-        entries.sort(
-            key=lambda e: (e.file or "", e.line if e.line is not None else 0)
-        )
+        entries.sort(key=lambda e: (e.file or "", e.line if e.line is not None else 0))
 
         # Pass 2: expand children (R7/R8)
         if current_depth < max_depth:
@@ -582,26 +576,20 @@ def build_generic_used_by(
 
                 # R7: Resolve containing method for recursive depth
                 resolve_id = entry.node_id
-                node_kind_rec = runner.execute_single(
-                    _Q_NODE_KIND, node_id=resolve_id
-                )
+                node_kind_rec = runner.execute_single(_Q_NODE_KIND, node_id=resolve_id)
                 node_kind = node_kind_rec["kind"] if node_kind_rec else None
 
                 method_id = None
                 if node_kind in ("Method", "Function"):
                     method_id = resolve_id
                 else:
-                    method_rec = runner.execute_single(
-                        _Q_CONTAINING_METHOD, node_id=resolve_id
-                    )
+                    method_rec = runner.execute_single(_Q_CONTAINING_METHOD, node_id=resolve_id)
                     if method_rec:
                         method_id = method_rec.get("method_id")
 
                 if method_id and method_id not in branch_visited:
                     child_branch_visited = branch_visited | {method_id}
-                    entry.children = build_tree(
-                        method_id, current_depth + 1, child_branch_visited
-                    )
+                    entry.children = build_tree(method_id, current_depth + 1, child_branch_visited)
 
         return entries
 

@@ -13,8 +13,8 @@ class UsageEntry:
     depth: int
     node_id: str
     fqn: str
-    file: Optional[str] = None
-    line: Optional[int] = None
+    file: str | None = None
+    line: int | None = None
     children: list["UsageEntry"] = field(default_factory=list)
 
     def to_dict(self) -> dict:
@@ -43,9 +43,7 @@ class UsagesTreeResult:
                 "kind": self.target.kind,
                 "fqn": self.target.fqn,
                 "file": self.target.file,
-                "line": self.target.start_line + 1
-                if self.target.start_line is not None
-                else None,
+                "line": self.target.start_line + 1 if self.target.start_line is not None else None,
             },
             "max_depth": self.max_depth,
             "tree": [e.to_dict() for e in self.tree],
@@ -59,8 +57,8 @@ class DepsEntry:
     depth: int
     node_id: str
     fqn: str
-    file: Optional[str] = None
-    line: Optional[int] = None
+    file: str | None = None
+    line: int | None = None
     children: list["DepsEntry"] = field(default_factory=list)
 
     def to_dict(self) -> dict:
@@ -89,9 +87,7 @@ class DepsTreeResult:
                 "kind": self.target.kind,
                 "fqn": self.target.fqn,
                 "file": self.target.file,
-                "line": self.target.start_line + 1
-                if self.target.start_line is not None
-                else None,
+                "line": self.target.start_line + 1 if self.target.start_line is not None else None,
             },
             "max_depth": self.max_depth,
             "tree": [e.to_dict() for e in self.tree],
@@ -112,9 +108,7 @@ class OwnersResult:
                     "kind": n.kind,
                     "fqn": n.fqn,
                     "file": n.file,
-                    "line": n.start_line + 1
-                    if n.start_line is not None
-                    else None,
+                    "line": n.start_line + 1 if n.start_line is not None else None,
                 }
                 for n in self.chain
             ]
@@ -129,8 +123,8 @@ class InheritEntry:
     node_id: str
     fqn: str
     kind: str
-    file: Optional[str] = None
-    line: Optional[int] = None
+    file: str | None = None
+    line: int | None = None
     children: list["InheritEntry"] = field(default_factory=list)
 
     def to_dict(self) -> dict:
@@ -165,9 +159,7 @@ class InheritTreeResult:
                 "kind": self.root.kind,
                 "fqn": self.root.fqn,
                 "file": self.root.file,
-                "line": self.root.start_line + 1
-                if self.root.start_line is not None
-                else None,
+                "line": self.root.start_line + 1 if self.root.start_line is not None else None,
             },
             "direction": self.direction,
             "max_depth": self.max_depth,
@@ -182,8 +174,8 @@ class OverrideEntry:
     depth: int
     node_id: str
     fqn: str
-    file: Optional[str] = None
-    line: Optional[int] = None
+    file: str | None = None
+    line: int | None = None
     children: list["OverrideEntry"] = field(default_factory=list)
 
     def to_dict(self) -> dict:
@@ -217,9 +209,7 @@ class OverridesTreeResult:
                 "kind": self.root.kind,
                 "fqn": self.root.fqn,
                 "file": self.root.file,
-                "line": self.root.start_line + 1
-                if self.root.start_line is not None
-                else None,
+                "line": self.root.start_line + 1 if self.root.start_line is not None else None,
             },
             "direction": self.direction,
             "max_depth": self.max_depth,
@@ -238,15 +228,15 @@ class MemberRef:
 
     target_name: str
     target_fqn: str
-    target_kind: Optional[str] = None
-    file: Optional[str] = None
-    line: Optional[int] = None       # 0-based internally
-    reference_type: Optional[str] = None
-    access_chain: Optional[str] = None
-    access_chain_symbol: Optional[str] = None
-    on_kind: Optional[str] = None
-    on_file: Optional[str] = None
-    on_line: Optional[int] = None    # 0-based internally
+    target_kind: str | None = None
+    file: str | None = None
+    line: int | None = None  # 0-based internally
+    reference_type: str | None = None
+    access_chain: str | None = None
+    access_chain_symbol: str | None = None
+    on_kind: str | None = None
+    on_file: str | None = None
+    on_line: int | None = None  # 0-based internally
 
 
 @dataclass
@@ -254,13 +244,13 @@ class ArgumentInfo:
     """Argument-to-parameter mapping at a call site."""
 
     position: int
-    param_name: Optional[str] = None
-    value_expr: Optional[str] = None
-    value_source: Optional[str] = None
-    value_type: Optional[str] = None
-    param_fqn: Optional[str] = None
-    value_ref_symbol: Optional[str] = None
-    source_chain: Optional[list] = None
+    param_name: str | None = None
+    value_expr: str | None = None
+    value_source: str | None = None
+    value_type: str | None = None
+    param_fqn: str | None = None
+    value_ref_symbol: str | None = None
+    source_chain: list | None = None
 
 
 @dataclass
@@ -270,31 +260,31 @@ class ContextEntry:
     depth: int
     node_id: str
     fqn: str
-    kind: Optional[str] = None
-    file: Optional[str] = None
-    line: Optional[int] = None              # 0-based internally
-    signature: Optional[str] = None
+    kind: str | None = None
+    file: str | None = None
+    line: int | None = None  # 0-based internally
+    signature: str | None = None
     children: list["ContextEntry"] = field(default_factory=list)
     implementations: list["ContextEntry"] = field(default_factory=list)
     via_interface: bool = False
-    member_ref: Optional[MemberRef] = None
+    member_ref: MemberRef | None = None
     arguments: list[ArgumentInfo] = field(default_factory=list)
-    result_var: Optional[str] = None
-    entry_type: Optional[str] = None        # "call" or "local_variable"
-    variable_name: Optional[str] = None
-    variable_symbol: Optional[str] = None
-    variable_type: Optional[str] = None
+    result_var: str | None = None
+    entry_type: str | None = None  # "call" or "local_variable"
+    variable_name: str | None = None
+    variable_symbol: str | None = None
+    variable_type: str | None = None
     source_call: Optional["ContextEntry"] = None
-    crossed_from: Optional[str] = None
-    ref_type: Optional[str] = None          # "instantiation", "extends", etc.
-    callee: Optional[str] = None
-    on: Optional[str] = None                # receiver expression
-    on_kind: Optional[str] = None           # "property", "param", "local", "self"
-    sites: Optional[list] = None
-    via: Optional[str] = None
-    property_name: Optional[str] = None
-    access_count: Optional[int] = None
-    method_count: Optional[int] = None
+    crossed_from: str | None = None
+    ref_type: str | None = None  # "instantiation", "extends", etc.
+    callee: str | None = None
+    on: str | None = None  # receiver expression
+    on_kind: str | None = None  # "property", "param", "local", "self"
+    sites: list | None = None
+    via: str | None = None
+    property_name: str | None = None
+    access_count: int | None = None
+    method_count: int | None = None
 
 
 @dataclass
@@ -303,20 +293,20 @@ class DefinitionInfo:
 
     fqn: str
     kind: str
-    file: Optional[str] = None
-    line: Optional[int] = None
-    signature: Optional[str] = None
+    file: str | None = None
+    line: int | None = None
+    signature: str | None = None
     arguments: list[dict] = field(default_factory=list)
-    return_type: Optional[dict] = None
-    declared_in: Optional[dict] = None
+    return_type: dict | None = None
+    declared_in: dict | None = None
     properties: list[dict] = field(default_factory=list)
     methods: list[dict] = field(default_factory=list)
-    extends: Optional[str] = None
+    extends: str | None = None
     implements: list[str] = field(default_factory=list)
     uses_traits: list[str] = field(default_factory=list)
-    value_kind: Optional[str] = None
-    type_info: Optional[dict] = None
-    source: Optional[dict] = None
+    value_kind: str | None = None
+    type_info: dict | None = None
+    source: dict | None = None
     constructor_deps: list[dict] = field(default_factory=list)
 
 
@@ -328,4 +318,4 @@ class ContextResult:
     max_depth: int
     used_by: list[ContextEntry] = field(default_factory=list)
     uses: list[ContextEntry] = field(default_factory=list)
-    definition: Optional[DefinitionInfo] = None
+    definition: DefinitionInfo | None = None

@@ -1,8 +1,8 @@
 """Cypher queries and execution functions for owners (containment chain)."""
 
+from ...models.node import NodeData
 from ..query_runner import QueryRunner
 from ..result_mapper import record_to_node
-from ...models.node import NodeData
 
 # Fetch a single node by ID
 FETCH_NODE = """

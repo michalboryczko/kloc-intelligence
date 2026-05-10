@@ -12,8 +12,8 @@ search can return flows alongside other code.
 
 import logging
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Callable, Optional
 
 from ..db.connection import Neo4jConnection
 from ..db.query_runner import QueryRunner
@@ -55,13 +55,14 @@ class FlowEnricher:
         if self._explain_pipeline is not None:
             return
         from .pipelines import build_embed_pipeline, build_explain_flow_pipeline
+
         self._explain_pipeline = build_explain_flow_pipeline(self._config)
         self._embed_pipeline = build_embed_pipeline(self._config, "flow_explain_embeddings")
 
     def enrich_all_flows(
         self,
         force: bool = False,
-        callback: Optional[Callable[[FlowEnrichmentProgress], None]] = None,
+        callback: Callable[[FlowEnrichmentProgress], None] | None = None,
     ) -> FlowEnrichmentProgress:
         self._init_pipelines()
         flows = self._fetch_flows(force)
@@ -87,9 +88,7 @@ class FlowEnricher:
 
     def enrich_flow(self, flow_id: str, force: bool = False) -> dict:
         self._init_pipelines()
-        record = self._runner.execute_single(
-            "MATCH (f:Flow {flow_id: $fid}) RETURN f", fid=flow_id
-        )
+        record = self._runner.execute_single("MATCH (f:Flow {flow_id: $fid}) RETURN f", fid=flow_id)
         if not record or not record["f"]:
             return {"error": f"Flow not found: {flow_id}"}
         flow = self._flow_record_to_dict(record["f"])
@@ -116,15 +115,13 @@ class FlowEnricher:
         if method is None:
             raise ValueError(
                 f"Flow {flow_id} has no FLOW_ENTRY edge and entry FQN "
-                f"'{flow.get('entry_fqn','')}::{flow.get('entry_method','')}' "
+                f"'{flow.get('entry_fqn', '')}::{flow.get('entry_method', '')}' "
                 f"could not be resolved against the :Node graph"
             )
 
         entry_source = self._reader.read_node_source(method)
         if not entry_source:
-            raise ValueError(
-                f"Cannot read entry source for flow {flow_id} (file: {method.file})"
-            )
+            raise ValueError(f"Cannot read entry source for flow {flow_id} (file: {method.file})")
 
         referenced = self._gather_context_chunks(method)
 
@@ -135,8 +132,8 @@ class FlowEnricher:
             self._explain_pipeline,
             flow_type=flow["type"],
             flow_name=flow["name"],
-            entry_fqn=f"{flow.get('entry_fqn','')}::{flow.get('entry_method','')}".rstrip(":"),
-            entry_source=entry_source[:MAX_REF_CHARS_PER_NODE * 4],
+            entry_fqn=f"{flow.get('entry_fqn', '')}::{flow.get('entry_method', '')}".rstrip(":"),
+            entry_source=entry_source[: MAX_REF_CHARS_PER_NODE * 4],
             route=flow.get("route", "") or "",
             http_methods=http_methods_str,
             message_class=flow.get("message_class", "") or "",
@@ -231,7 +228,8 @@ class FlowEnricher:
             if results:
                 logger.warning(
                     "Flow entry resolved via fallback (%s -> %s) — FLOW_ENTRY edge missing",
-                    q, results[0].fqn,
+                    q,
+                    results[0].fqn,
                 )
                 return results[0]
         return None
@@ -255,15 +253,16 @@ class FlowEnricher:
         except Exception as exc:
             logger.warning(
                 "Context walk failed for %s: %s — proceeding with entry source only",
-                entry_method.fqn, exc,
+                entry_method.fqn,
+                exc,
             )
             return []
 
         seen_ids: set[str] = {entry_method.node_id}
         candidates: list[tuple[int, ContextEntry]] = []
-        for entry in (result.used_by or []):
+        for entry in result.used_by or []:
             self._collect_context_entries(entry, seen_ids, candidates)
-        for entry in (result.uses or []):
+        for entry in result.uses or []:
             self._collect_context_entries(entry, seen_ids, candidates)
 
         candidates.sort(key=lambda pair: pair[0])
@@ -290,15 +289,13 @@ class FlowEnricher:
         if entry.node_id and entry.node_id not in seen_ids:
             seen_ids.add(entry.node_id)
             out.append((entry.depth, entry))
-        for child in (entry.children or []):
+        for child in entry.children or []:
             self._collect_context_entries(child, seen_ids, out)
-        for impl in (entry.implementations or []):
+        for impl in entry.implementations or []:
             self._collect_context_entries(impl, seen_ids, out)
 
     def _fetch_node(self, node_id: str) -> NodeData | None:
-        record = self._runner.execute_single(
-            "MATCH (n:Node {node_id: $nid}) RETURN n", nid=node_id
-        )
+        record = self._runner.execute_single("MATCH (n:Node {node_id: $nid}) RETURN n", nid=node_id)
         if not record or not record["n"]:
             return None
         return record_to_node(record)
@@ -321,6 +318,7 @@ def clear_flow_explain_collection(qdrant_url: str, qdrant_api_key: str | None = 
     """Drop the flow_explain_embeddings collection. Idempotent."""
     try:
         from qdrant_client import QdrantClient
+
         client = QdrantClient(url=qdrant_url, api_key=qdrant_api_key)
         try:
             client.delete_collection("flow_explain_embeddings")

@@ -2,7 +2,6 @@
 
 import logging
 from pathlib import Path
-from typing import Optional
 
 from ..models.node import NodeData
 
@@ -16,7 +15,7 @@ class SourceReader:
         self._root = Path(project_root)
         logger.debug("SourceReader initialized with root: %s", project_root)
 
-    def read_node_source(self, node: NodeData) -> Optional[str]:
+    def read_node_source(self, node: NodeData) -> str | None:
         """Read source code for a node using its file + enclosing range."""
         if not node.file:
             logger.debug("Node %s has no file field, skipping", node.fqn)
@@ -41,16 +40,21 @@ class SourceReader:
         if source:
             logger.debug(
                 "Read source for %s: %s lines %d..%d (%d chars, ~%d tokens)",
-                node.fqn, node.file, start, end, len(source), self.estimate_tokens(source),
+                node.fqn,
+                node.file,
+                start,
+                end,
+                len(source),
+                self.estimate_tokens(source),
             )
         return source
 
-    def read_file_range(self, file_path: str, start_line: int, end_line: int) -> Optional[str]:
+    def read_file_range(self, file_path: str, start_line: int, end_line: int) -> str | None:
         """Read a specific line range from a file (0-based line numbers)."""
         try:
-            with open(file_path, "r", encoding="utf-8", errors="replace") as f:
+            with open(file_path, encoding="utf-8", errors="replace") as f:
                 lines = f.readlines()
-        except (OSError, IOError) as e:
+        except OSError as e:
             logger.debug("Failed to read %s: %s", file_path, e)
             return None
 
@@ -62,7 +66,7 @@ class SourceReader:
         if start_line > end_line or start_line >= len(lines):
             return None
 
-        return "".join(lines[start_line: end_line + 1])
+        return "".join(lines[start_line : end_line + 1])
 
     @staticmethod
     def estimate_tokens(text: str) -> int:

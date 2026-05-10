@@ -15,6 +15,7 @@ venv/
 *.so
 .coverage
 htmlcov/
+coverage.xml
 
 # OS
 .DS_Store

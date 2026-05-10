@@ -5,14 +5,14 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from src.db.query_runner import QueryRunner
 from src.models.node import NodeData
 from src.models.results import OverrideEntry, OverridesTreeResult
 from src.orchestration.simple import (
-    run_overrides,
-    run_overrides_by_id,
     _build_overrides_tree,
+    run_overrides,
 )
-from src.db.query_runner import QueryRunner
+
 from .conftest import requires_neo4j
 
 
@@ -41,15 +41,18 @@ def _mock_neighbor(node_id, fqn, file=None, start_line=None):
 
 def _reload_if_empty(conn):
     """Reload test data if the database was cleared by another test."""
+    from src.db.importer import import_edges, import_nodes, parse_sot
     from src.db.schema import ensure_schema
-    from src.db.importer import parse_sot, import_nodes, import_edges
 
     runner = QueryRunner(conn)
     count = runner.execute_count("MATCH (n:Node) RETURN count(n)")
     if count == 0:
         sot_path = (
             Path(__file__).parent.parent.parent
-            / "artifacts" / "kloc-dev" / "context-final" / "sot.json"
+            / "artifacts"
+            / "kloc-dev"
+            / "context-final"
+            / "sot.json"
         )
         ensure_schema(conn)
         nodes, edges = parse_sot(str(sot_path))
@@ -65,8 +68,10 @@ class TestOverridesTreeUnit:
         runner = MagicMock(spec=QueryRunner)
         target = _make_node()
 
-        with patch("src.orchestration.simple.query_override_neighbors", return_value=[]), \
-             patch("src.orchestration.simple.fetch_node", return_value=target):
+        with (
+            patch("src.orchestration.simple.query_override_neighbors", return_value=[]),
+            patch("src.orchestration.simple.fetch_node", return_value=target),
+        ):
             result = _build_overrides_tree(runner, target, "up", depth=5, limit=100)
 
         assert result.root == target
@@ -78,8 +83,10 @@ class TestOverridesTreeUnit:
         runner = MagicMock(spec=QueryRunner)
         target = _make_node()
         parent = _make_node(
-            node_id="parent-m", fqn="App\\Base::process()",
-            file="src/Base.php", start_line=15,
+            node_id="parent-m",
+            fqn="App\\Base::process()",
+            file="src/Base.php",
+            start_line=15,
         )
 
         neighbors = [_mock_neighbor("parent-m", "App\\Base::process()", "src/Base.php", 15)]
@@ -93,8 +100,10 @@ class TestOverridesTreeUnit:
                 return neighbors
             return []
 
-        with patch("src.orchestration.simple.query_override_neighbors", side_effect=mock_neighbors), \
-             patch("src.orchestration.simple.fetch_node", return_value=parent):
+        with (
+            patch("src.orchestration.simple.query_override_neighbors", side_effect=mock_neighbors),
+            patch("src.orchestration.simple.fetch_node", return_value=parent),
+        ):
             result = _build_overrides_tree(runner, target, "up", depth=5, limit=100)
 
         assert len(result.tree) == 1
@@ -107,8 +116,10 @@ class TestOverridesTreeUnit:
         runner = MagicMock(spec=QueryRunner)
         target = _make_node()
         child = _make_node(
-            node_id="child-m", fqn="App\\Sub::process()",
-            file="src/Sub.php", start_line=25,
+            node_id="child-m",
+            fqn="App\\Sub::process()",
+            file="src/Sub.php",
+            start_line=25,
         )
 
         neighbors = [_mock_neighbor("child-m", "App\\Sub::process()", "src/Sub.php", 25)]
@@ -122,8 +133,10 @@ class TestOverridesTreeUnit:
                 return neighbors
             return []
 
-        with patch("src.orchestration.simple.query_override_neighbors", side_effect=mock_neighbors), \
-             patch("src.orchestration.simple.fetch_node", return_value=child):
+        with (
+            patch("src.orchestration.simple.query_override_neighbors", side_effect=mock_neighbors),
+            patch("src.orchestration.simple.fetch_node", return_value=child),
+        ):
             result = _build_overrides_tree(runner, target, "down", depth=5, limit=100)
 
         assert len(result.tree) == 1
@@ -151,8 +164,10 @@ class TestOverridesTreeUnit:
                 return node_c
             return None
 
-        with patch("src.orchestration.simple.query_override_neighbors", side_effect=mock_neighbors), \
-             patch("src.orchestration.simple.fetch_node", side_effect=mock_fetch):
+        with (
+            patch("src.orchestration.simple.query_override_neighbors", side_effect=mock_neighbors),
+            patch("src.orchestration.simple.fetch_node", side_effect=mock_fetch),
+        ):
             result = _build_overrides_tree(runner, target, "up", depth=5, limit=100)
 
         assert len(result.tree) == 1
@@ -175,8 +190,10 @@ class TestOverridesTreeUnit:
                 return [_mock_neighbor("A", "A::foo()")]  # Cycle
             return []
 
-        with patch("src.orchestration.simple.query_override_neighbors", side_effect=mock_neighbors), \
-             patch("src.orchestration.simple.fetch_node", return_value=node_b):
+        with (
+            patch("src.orchestration.simple.query_override_neighbors", side_effect=mock_neighbors),
+            patch("src.orchestration.simple.fetch_node", return_value=node_b),
+        ):
             result = _build_overrides_tree(runner, target, "up", depth=10, limit=100)
 
         assert len(result.tree) == 1
@@ -195,8 +212,10 @@ class TestOverridesTreeUnit:
                 return [_mock_neighbor("C", "C::foo()")]
             return []
 
-        with patch("src.orchestration.simple.query_override_neighbors", side_effect=mock_neighbors), \
-             patch("src.orchestration.simple.fetch_node", return_value=node_b):
+        with (
+            patch("src.orchestration.simple.query_override_neighbors", side_effect=mock_neighbors),
+            patch("src.orchestration.simple.fetch_node", return_value=node_b),
+        ):
             result = _build_overrides_tree(runner, target, "up", depth=1, limit=100)
 
         assert len(result.tree) == 1
@@ -221,8 +240,10 @@ class TestOverridesTreeUnit:
         def mock_fetch(r, nid):
             return _make_node(node_id=nid, fqn=f"{nid}::foo()")
 
-        with patch("src.orchestration.simple.query_override_neighbors", side_effect=mock_neighbors), \
-             patch("src.orchestration.simple.fetch_node", side_effect=mock_fetch):
+        with (
+            patch("src.orchestration.simple.query_override_neighbors", side_effect=mock_neighbors),
+            patch("src.orchestration.simple.fetch_node", side_effect=mock_fetch),
+        ):
             result = _build_overrides_tree(runner, target, "down", depth=5, limit=2)
 
         assert len(result.tree) <= 2
@@ -245,8 +266,10 @@ class TestOverridesTreeUnit:
         def mock_fetch(r, nid):
             return _make_node(node_id=nid, fqn=f"{nid}::foo()")
 
-        with patch("src.orchestration.simple.query_override_neighbors", side_effect=mock_neighbors), \
-             patch("src.orchestration.simple.fetch_node", side_effect=mock_fetch):
+        with (
+            patch("src.orchestration.simple.query_override_neighbors", side_effect=mock_neighbors),
+            patch("src.orchestration.simple.fetch_node", side_effect=mock_fetch),
+        ):
             result = _build_overrides_tree(runner, target, "down", depth=5, limit=100)
 
         assert len(result.tree) == 2
@@ -272,19 +295,6 @@ class TestRunOverridesUnit:
             with pytest.raises(ValueError, match="Node must be Method"):
                 run_overrides(runner, "App\\SomeClass")
 
-    def test_run_overrides_by_id_not_found(self):
-        runner = MagicMock(spec=QueryRunner)
-        with patch("src.orchestration.simple.fetch_node", return_value=None):
-            with pytest.raises(ValueError, match="Node not found"):
-                run_overrides_by_id(runner, "nonexistent-id")
-
-    def test_run_overrides_by_id_wrong_kind(self):
-        runner = MagicMock(spec=QueryRunner)
-        cls = _make_node(kind="Class")
-        with patch("src.orchestration.simple.fetch_node", return_value=cls):
-            with pytest.raises(ValueError, match="Node must be Method"):
-                run_overrides_by_id(runner, "class-1")
-
 
 class TestOverridesToDict:
     """Test to_dict serialization for overrides output."""
@@ -292,8 +302,7 @@ class TestOverridesToDict:
     def test_flat_result(self):
         target = _make_node()
         entries = [
-            OverrideEntry(depth=1, node_id="p1", fqn="Base::process()",
-                          file="base.php", line=10),
+            OverrideEntry(depth=1, node_id="p1", fqn="Base::process()", file="base.php", line=10),
         ]
         result = OverridesTreeResult(root=target, direction="up", max_depth=5, tree=entries)
         d = result.to_dict()
@@ -304,10 +313,10 @@ class TestOverridesToDict:
 
     def test_nested_result(self):
         target = _make_node()
-        child = OverrideEntry(depth=2, node_id="gp1", fqn="GrandBase::process()",
-                              file="gb.php", line=5)
-        parent = OverrideEntry(depth=1, node_id="p1", fqn="Base::process()",
-                               children=[child])
+        child = OverrideEntry(
+            depth=2, node_id="gp1", fqn="GrandBase::process()", file="gb.php", line=5
+        )
+        parent = OverrideEntry(depth=1, node_id="p1", fqn="Base::process()", children=[child])
         result = OverridesTreeResult(root=target, direction="up", max_depth=5, tree=[parent])
         d = result.to_dict()
         assert d["tree"][0]["children"][0]["fqn"] == "GrandBase::process()"
@@ -348,21 +357,15 @@ class TestOverridesIntegration:
     def test_method_overrides_no_error(self, loaded_database):
         """Running overrides on a method should not raise errors."""
         runner = QueryRunner(loaded_database)
-        # Find any method node first
-        method_record = runner.execute_single(
-            "MATCH (n:Node {kind: 'Method'}) RETURN n LIMIT 1"
-        )
+        method_record = runner.execute_single("MATCH (n:Node {kind: 'Method'}) RETURN n LIMIT 1")
         if method_record is None:
             pytest.skip("No Method nodes in database")
         from src.db.result_mapper import record_to_node
+
         method = record_to_node(method_record)
-        result = run_overrides_by_id(
-            runner, method.node_id, direction="up", depth=3, limit=50
-        )
+        result = run_overrides(runner, method.fqn, direction="up", depth=3, limit=50)
         assert result.direction == "up"
-        result_down = run_overrides_by_id(
-            runner, method.node_id, direction="down", depth=3, limit=50
-        )
+        result_down = run_overrides(runner, method.fqn, direction="down", depth=3, limit=50)
         assert result_down.direction == "down"
 
     def test_class_raises_error(self, loaded_database):
@@ -374,17 +377,15 @@ class TestOverridesIntegration:
     def test_no_duplicate_nodes(self, loaded_database):
         """No node should appear twice in the tree."""
         runner = QueryRunner(loaded_database)
-        # Find a method that may have overrides
         method_record = runner.execute_single(
             "MATCH (n:Node {kind: 'Method'})-[:OVERRIDES]->() RETURN n LIMIT 1"
         )
         if method_record is None:
             pytest.skip("No methods with overrides in database")
         from src.db.result_mapper import record_to_node
+
         method = record_to_node(method_record)
-        result = run_overrides_by_id(
-            runner, method.node_id, direction="up", depth=5, limit=50
-        )
+        result = run_overrides(runner, method.fqn, direction="up", depth=5, limit=50)
 
         seen = set()
 
@@ -407,16 +408,13 @@ class TestOverridesIntegration:
         import json
 
         runner = QueryRunner(loaded_database)
-        method_record = runner.execute_single(
-            "MATCH (n:Node {kind: 'Method'}) RETURN n LIMIT 1"
-        )
+        method_record = runner.execute_single("MATCH (n:Node {kind: 'Method'}) RETURN n LIMIT 1")
         if method_record is None:
             pytest.skip("No Method nodes in database")
         from src.db.result_mapper import record_to_node
+
         method = record_to_node(method_record)
-        result = run_overrides_by_id(
-            runner, method.node_id, direction="up", depth=2, limit=10
-        )
+        result = run_overrides(runner, method.fqn, direction="up", depth=2, limit=10)
         d = result.to_dict()
         json_str = json.dumps(d)
         parsed = json.loads(json_str)

@@ -125,9 +125,7 @@ def get_flow_detail(connection: Neo4jConnection, flow_id: str) -> dict | None:
     Returns None if no flow exists with this exact flow_id.
     """
     head_query = (
-        "MATCH (f:Flow {flow_id: $flow_id}) "
-        "OPTIONAL MATCH (f)-[:FLOW_ENTRY]->(m:Node) "
-        "RETURN f, m"
+        "MATCH (f:Flow {flow_id: $flow_id}) OPTIONAL MATCH (f)-[:FLOW_ENTRY]->(m:Node) RETURN f, m"
     )
     with connection.session() as session:
         head = session.run(head_query, flow_id=flow_id).single()

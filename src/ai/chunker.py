@@ -4,7 +4,6 @@ import logging
 from dataclasses import dataclass
 
 from ..models.node import NodeData
-from .source_reader import SourceReader
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +43,11 @@ class CodeChunker:
         """
         logger.debug(
             "Chunking %s %s: %d chars (~%d tokens), max=%d tokens",
-            node.kind, node.fqn, len(source), len(source) // 4, self._max_tokens,
+            node.kind,
+            node.fqn,
+            len(source),
+            len(source) // 4,
+            self._max_tokens,
         )
         if node.kind == "Method" or node.kind == "Function":
             chunks = self._chunk_method(node, source)
@@ -56,21 +59,25 @@ class CodeChunker:
             return chunks
         else:
             logger.debug("  -> 1 chunk (fallback kind: %s)", node.kind)
-            return [CodeChunk(
+            return [
+                CodeChunk(
+                    node_id=node.node_id,
+                    chunk_index=0,
+                    total_chunks=1,
+                    content=self._truncate(source),
+                )
+            ]
+
+    def _chunk_method(self, node: NodeData, source: str) -> list[CodeChunk]:
+        """Methods are always a single chunk. Truncate if too large."""
+        return [
+            CodeChunk(
                 node_id=node.node_id,
                 chunk_index=0,
                 total_chunks=1,
                 content=self._truncate(source),
-            )]
-
-    def _chunk_method(self, node: NodeData, source: str) -> list[CodeChunk]:
-        """Methods are always a single chunk. Truncate if too large."""
-        return [CodeChunk(
-            node_id=node.node_id,
-            chunk_index=0,
-            total_chunks=1,
-            content=self._truncate(source),
-        )]
+            )
+        ]
 
     def _chunk_class(
         self,
@@ -80,21 +87,25 @@ class CodeChunker:
     ) -> list[CodeChunk]:
         """Chunk class by method boundaries if too large."""
         if len(source) <= self._max_chars:
-            return [CodeChunk(
-                node_id=node.node_id,
-                chunk_index=0,
-                total_chunks=1,
-                content=source,
-            )]
+            return [
+                CodeChunk(
+                    node_id=node.node_id,
+                    chunk_index=0,
+                    total_chunks=1,
+                    content=source,
+                )
+            ]
 
         if not method_sources:
             # No method info available; truncate the whole class
-            return [CodeChunk(
-                node_id=node.node_id,
-                chunk_index=0,
-                total_chunks=1,
-                content=self._truncate(source),
-            )]
+            return [
+                CodeChunk(
+                    node_id=node.node_id,
+                    chunk_index=0,
+                    total_chunks=1,
+                    content=self._truncate(source),
+                )
+            ]
 
         # Build class context prefix (declaration + properties, no method bodies)
         prefix = self._build_class_prefix(node, source, method_sources)
@@ -103,12 +114,14 @@ class CodeChunker:
 
         if available <= 0:
             # Prefix alone is too large
-            return [CodeChunk(
-                node_id=node.node_id,
-                chunk_index=0,
-                total_chunks=1,
-                content=self._truncate(source),
-            )]
+            return [
+                CodeChunk(
+                    node_id=node.node_id,
+                    chunk_index=0,
+                    total_chunks=1,
+                    content=self._truncate(source),
+                )
+            ]
 
         # Pack methods into chunks
         chunks: list[CodeChunk] = []
@@ -120,12 +133,14 @@ class CodeChunker:
             if current_len + method_len > available and current_methods:
                 # Flush current chunk
                 chunk_content = prefix + "\n".join(current_methods)
-                chunks.append(CodeChunk(
-                    node_id=node.node_id,
-                    chunk_index=len(chunks),
-                    total_chunks=0,  # will be set later
-                    content=chunk_content,
-                ))
+                chunks.append(
+                    CodeChunk(
+                        node_id=node.node_id,
+                        chunk_index=len(chunks),
+                        total_chunks=0,  # will be set later
+                        content=chunk_content,
+                    )
+                )
                 current_methods = []
                 current_len = 0
             current_methods.append(method_source)
@@ -134,20 +149,24 @@ class CodeChunker:
         # Flush remaining
         if current_methods:
             chunk_content = prefix + "\n".join(current_methods)
-            chunks.append(CodeChunk(
-                node_id=node.node_id,
-                chunk_index=len(chunks),
-                total_chunks=0,
-                content=chunk_content,
-            ))
+            chunks.append(
+                CodeChunk(
+                    node_id=node.node_id,
+                    chunk_index=len(chunks),
+                    total_chunks=0,
+                    content=chunk_content,
+                )
+            )
 
         if not chunks:
-            return [CodeChunk(
-                node_id=node.node_id,
-                chunk_index=0,
-                total_chunks=1,
-                content=self._truncate(source),
-            )]
+            return [
+                CodeChunk(
+                    node_id=node.node_id,
+                    chunk_index=0,
+                    total_chunks=1,
+                    content=self._truncate(source),
+                )
+            ]
 
         # Set total_chunks
         for chunk in chunks:
@@ -178,7 +197,7 @@ class CodeChunker:
             prefix_lines = lines[:first_method_line]
         else:
             # Fallback: take first 20 lines as header
-            prefix_lines = lines[:min(20, len(lines))]
+            prefix_lines = lines[: min(20, len(lines))]
 
         prefix = "\n".join(prefix_lines)
         prefix += f"\n    // ... ({len(method_sources)} methods, chunked for embedding)\n\n"

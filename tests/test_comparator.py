@@ -1,8 +1,8 @@
 """Unit tests for the snapshot comparator."""
 
 from tests.snapshot_compare import (
-    FieldDiff,
     ComparisonResult,
+    FieldDiff,
     compare_json,
     compare_snapshot,
     format_diff_report,
@@ -259,9 +259,7 @@ class TestFormatDiffReport:
         assert "$.val" in report
 
     def test_max_diffs_truncation(self):
-        diffs = [
-            FieldDiff(f"$.field{i}", i, i + 100, "value_mismatch") for i in range(30)
-        ]
+        diffs = [FieldDiff(f"$.field{i}", i, i + 100, "value_mismatch") for i in range(30)]
         result = ComparisonResult(query_id="q1", passed=False, diffs=diffs)
         report = format_diff_report(result, max_diffs=5)
         assert "... and 25 more diffs" in report
@@ -270,9 +268,7 @@ class TestFormatDiffReport:
         assert len(lines) == 7  # 1 summary + 5 diffs + 1 truncation
 
     def test_default_max_diffs_is_20(self):
-        diffs = [
-            FieldDiff(f"$.field{i}", i, i + 100, "value_mismatch") for i in range(25)
-        ]
+        diffs = [FieldDiff(f"$.field{i}", i, i + 100, "value_mismatch") for i in range(25)]
         result = ComparisonResult(query_id="q1", passed=False, diffs=diffs)
         report = format_diff_report(result)
         assert "... and 5 more diffs" in report

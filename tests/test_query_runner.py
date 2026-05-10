@@ -1,6 +1,7 @@
 """Tests for QueryRunner."""
 
 from src.db.query_runner import QueryRunner
+
 from .conftest import requires_neo4j
 
 
@@ -64,9 +65,7 @@ class TestQueryRunner:
     def test_execute_value_returns_none(self, loaded_database):
         """Test execute_value returns None when no match."""
         runner = QueryRunner(loaded_database)
-        value = runner.execute_value(
-            "MATCH (n:Node {fqn: 'nonexistent'}) RETURN n.name"
-        )
+        value = runner.execute_value("MATCH (n:Node {fqn: 'nonexistent'}) RETURN n.name")
         assert value is None
 
     def test_execute_count(self, loaded_database):
@@ -78,7 +77,5 @@ class TestQueryRunner:
     def test_execute_count_zero(self, loaded_database):
         """Test execute_count returns 0 for empty result."""
         runner = QueryRunner(loaded_database)
-        count = runner.execute_count(
-            "MATCH (n:Node {fqn: 'nonexistent'}) RETURN count(n)"
-        )
+        count = runner.execute_count("MATCH (n:Node {fqn: 'nonexistent'}) RETURN count(n)")
         assert count == 0

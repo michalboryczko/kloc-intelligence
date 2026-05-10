@@ -16,18 +16,6 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-from src.models.results import ContextEntry
-from src.orchestration.value_context import (
-    build_value_consumer_chain,
-    build_value_source_chain,
-    build_parameter_uses,
-    cross_into_callee,
-    cross_into_callers_via_return,
-    _build_callee_display,
-    _infer_ref_type_from_call_kind,
-    _resolve_on_kind,
-    _build_arguments_from_records,
-)
 from src.db.queries.context_value import (
     Q1_RECEIVER_CHAIN,
     Q2_DIRECT_ARGUMENTS,
@@ -41,7 +29,18 @@ from src.db.queries.context_value import (
     Q11_CALL_ARGUMENTS,
     Q12_CONTAINING_METHOD,
 )
-
+from src.models.results import ContextEntry
+from src.orchestration.value_context import (
+    _build_arguments_from_records,
+    _build_callee_display,
+    _infer_ref_type_from_call_kind,
+    _resolve_on_kind,
+    build_parameter_uses,
+    build_value_consumer_chain,
+    build_value_source_chain,
+    cross_into_callee,
+    cross_into_callers_via_return,
+)
 
 # =============================================================================
 # Fixtures / Factories
@@ -169,13 +168,22 @@ class TestBuildArgumentsFromRecords:
         assert infos == []
 
     def test_single_argument(self):
-        runner = make_runner(execute_map={
-            Q11_CALL_ARGUMENTS: [
-                {"position": 0, "expression": "$id", "value_kind": "local",
-                 "value_type": "int", "parameter": "param_fqn", "value_fqn": None,
-                 "value_id": "v1", "value_name": "$id"},
-            ]
-        })
+        runner = make_runner(
+            execute_map={
+                Q11_CALL_ARGUMENTS: [
+                    {
+                        "position": 0,
+                        "expression": "$id",
+                        "value_kind": "local",
+                        "value_type": "int",
+                        "parameter": "param_fqn",
+                        "value_fqn": None,
+                        "value_id": "v1",
+                        "value_name": "$id",
+                    },
+                ]
+            }
+        )
         infos = _build_arguments_from_records(runner, "call:1")
         assert len(infos) == 1
         assert infos[0].position == 0
@@ -183,28 +191,53 @@ class TestBuildArgumentsFromRecords:
         assert infos[0].value_type == "int"
 
     def test_multiple_sorted_by_position(self):
-        runner = make_runner(execute_map={
-            Q11_CALL_ARGUMENTS: [
-                {"position": 1, "expression": "$b", "value_kind": "local",
-                 "value_type": None, "parameter": None, "value_fqn": None,
-                 "value_id": "v2", "value_name": "$b"},
-                {"position": 0, "expression": "$a", "value_kind": "local",
-                 "value_type": None, "parameter": None, "value_fqn": None,
-                 "value_id": "v1", "value_name": "$a"},
-            ]
-        })
+        runner = make_runner(
+            execute_map={
+                Q11_CALL_ARGUMENTS: [
+                    {
+                        "position": 1,
+                        "expression": "$b",
+                        "value_kind": "local",
+                        "value_type": None,
+                        "parameter": None,
+                        "value_fqn": None,
+                        "value_id": "v2",
+                        "value_name": "$b",
+                    },
+                    {
+                        "position": 0,
+                        "expression": "$a",
+                        "value_kind": "local",
+                        "value_type": None,
+                        "parameter": None,
+                        "value_fqn": None,
+                        "value_id": "v1",
+                        "value_name": "$a",
+                    },
+                ]
+            }
+        )
         infos = _build_arguments_from_records(runner, "call:1")
         assert infos[0].position == 0
         assert infos[1].position == 1
 
     def test_skips_none_position(self):
-        runner = make_runner(execute_map={
-            Q11_CALL_ARGUMENTS: [
-                {"position": None, "expression": "$x", "value_kind": "local",
-                 "value_type": None, "parameter": None, "value_fqn": None,
-                 "value_id": "v1", "value_name": "$x"},
-            ]
-        })
+        runner = make_runner(
+            execute_map={
+                Q11_CALL_ARGUMENTS: [
+                    {
+                        "position": None,
+                        "expression": "$x",
+                        "value_kind": "local",
+                        "value_type": None,
+                        "parameter": None,
+                        "value_fqn": None,
+                        "value_id": "v1",
+                        "value_name": "$x",
+                    },
+                ]
+            }
+        )
         infos = _build_arguments_from_records(runner, "call:1")
         assert infos == []
 
@@ -248,10 +281,16 @@ class TestConsumerChainPart1ReceiverGrouping:
                 ],
                 Q2_DIRECT_ARGUMENTS: [],
                 Q11_CALL_ARGUMENTS: [
-                    {"position": 0, "expression": "$order->id",
-                     "value_kind": "result", "value_type": None,
-                     "parameter": "to_fqn", "value_fqn": None,
-                     "value_id": "v1", "value_name": None},
+                    {
+                        "position": 0,
+                        "expression": "$order->id",
+                        "value_kind": "result",
+                        "value_type": None,
+                        "parameter": "to_fqn",
+                        "value_fqn": None,
+                        "value_id": "v1",
+                        "value_name": None,
+                    },
                 ],
             },
         )
@@ -268,38 +307,48 @@ class TestConsumerChainPart1ReceiverGrouping:
                 Q1_RECEIVER_CHAIN: [
                     {
                         "access_call_id": "access:1",
-                        "access_call_file": "f.php", "access_call_line": 10,
+                        "access_call_file": "f.php",
+                        "access_call_line": 10,
                         "access_call_kind": "property_access",
-                        "target_id": "prop:id", "target_fqn": "Order::$id",
-                        "target_name": "$id", "target_kind": "Property",
+                        "target_id": "prop:id",
+                        "target_fqn": "Order::$id",
+                        "target_name": "$id",
+                        "target_kind": "Property",
                         "result_id": "r:1",
                         "consumer_call_id": "consumer:1",
-                        "consumer_call_file": "f.php", "consumer_call_line": 15,
+                        "consumer_call_file": "f.php",
+                        "consumer_call_line": 15,
                         "consumer_call_kind": "constructor",
                         "consumer_target_id": "cls:Output",
                         "consumer_target_fqn": "App\\Output",
                         "consumer_target_name": "Output",
                         "consumer_target_kind": "Class",
                         "consumer_target_signature": None,
-                        "arg_position": 0, "arg_expression": "$o->id",
+                        "arg_position": 0,
+                        "arg_expression": "$o->id",
                         "assigned_local_id": None,
                     },
                     {
                         "access_call_id": "access:2",
-                        "access_call_file": "f.php", "access_call_line": 11,
+                        "access_call_file": "f.php",
+                        "access_call_line": 11,
                         "access_call_kind": "property_access",
-                        "target_id": "prop:name", "target_fqn": "Order::$name",
-                        "target_name": "$name", "target_kind": "Property",
+                        "target_id": "prop:name",
+                        "target_fqn": "Order::$name",
+                        "target_name": "$name",
+                        "target_kind": "Property",
                         "result_id": "r:2",
                         "consumer_call_id": "consumer:1",
-                        "consumer_call_file": "f.php", "consumer_call_line": 15,
+                        "consumer_call_file": "f.php",
+                        "consumer_call_line": 15,
                         "consumer_call_kind": "constructor",
                         "consumer_target_id": "cls:Output",
                         "consumer_target_fqn": "App\\Output",
                         "consumer_target_name": "Output",
                         "consumer_target_kind": "Class",
                         "consumer_target_signature": None,
-                        "arg_position": 1, "arg_expression": "$o->name",
+                        "arg_position": 1,
+                        "arg_expression": "$o->name",
                         "assigned_local_id": None,
                     },
                 ],
@@ -319,20 +368,25 @@ class TestConsumerChainPart1ReceiverGrouping:
                 Q1_RECEIVER_CHAIN: [
                     {
                         "access_call_id": "access:1",
-                        "access_call_file": "f.php", "access_call_line": 5,
+                        "access_call_file": "f.php",
+                        "access_call_line": 5,
                         "access_call_kind": None,
-                        "target_id": "p:1", "target_fqn": "X::$id",
-                        "target_name": "$id", "target_kind": "Property",
+                        "target_id": "p:1",
+                        "target_fqn": "X::$id",
+                        "target_name": "$id",
+                        "target_kind": "Property",
                         "result_id": "r:1",
                         "consumer_call_id": "c:1",
-                        "consumer_call_file": "f.php", "consumer_call_line": 10,
+                        "consumer_call_file": "f.php",
+                        "consumer_call_line": 10,
                         "consumer_call_kind": "constructor",
                         "consumer_target_id": "cls:Y",
                         "consumer_target_fqn": "App\\Y",
                         "consumer_target_name": "Y",
                         "consumer_target_kind": "Class",
                         "consumer_target_signature": None,
-                        "arg_position": 0, "arg_expression": "$x->id",
+                        "arg_position": 0,
+                        "arg_expression": "$x->id",
                         "assigned_local_id": None,
                     },
                 ],
@@ -396,20 +450,25 @@ class TestConsumerChainPart2Standalone:
                 Q1_RECEIVER_CHAIN: [
                     {
                         "access_call_id": "access:1",
-                        "access_call_file": "f.php", "access_call_line": 5,
+                        "access_call_file": "f.php",
+                        "access_call_line": 5,
                         "access_call_kind": "property_access",
-                        "target_id": "prop:x", "target_fqn": "A::$x",
-                        "target_name": "$x", "target_kind": "Property",
+                        "target_id": "prop:x",
+                        "target_fqn": "A::$x",
+                        "target_name": "$x",
+                        "target_kind": "Property",
                         "result_id": "r:1",
                         "consumer_call_id": None,
-                        "consumer_call_file": None, "consumer_call_line": None,
+                        "consumer_call_file": None,
+                        "consumer_call_line": None,
                         "consumer_call_kind": None,
                         "consumer_target_id": None,
                         "consumer_target_fqn": None,
                         "consumer_target_name": None,
                         "consumer_target_kind": None,
                         "consumer_target_signature": None,
-                        "arg_position": None, "arg_expression": None,
+                        "arg_position": None,
+                        "arg_expression": None,
                         "assigned_local_id": "local:1",
                     },
                 ],
@@ -448,9 +507,16 @@ class TestConsumerChainPart3DirectArguments:
                     },
                 ],
                 Q11_CALL_ARGUMENTS: [
-                    {"position": 0, "expression": "$data", "value_kind": "local",
-                     "value_type": None, "parameter": None, "value_fqn": None,
-                     "value_id": "v1", "value_name": "$data"},
+                    {
+                        "position": 0,
+                        "expression": "$data",
+                        "value_kind": "local",
+                        "value_type": None,
+                        "parameter": None,
+                        "value_fqn": None,
+                        "value_id": "v1",
+                        "value_name": "$data",
+                    },
                 ],
             },
         )
@@ -477,38 +543,48 @@ class TestConsumerChainDedup:
                 Q1_RECEIVER_CHAIN: [
                     {
                         "access_call_id": "access:1",
-                        "access_call_file": "f.php", "access_call_line": 5,
+                        "access_call_file": "f.php",
+                        "access_call_line": 5,
                         "access_call_kind": None,
-                        "target_id": "p:1", "target_fqn": "X::$a",
-                        "target_name": "$a", "target_kind": "Property",
+                        "target_id": "p:1",
+                        "target_fqn": "X::$a",
+                        "target_name": "$a",
+                        "target_kind": "Property",
                         "result_id": "r:1",
                         "consumer_call_id": "consumer:1",
-                        "consumer_call_file": "f.php", "consumer_call_line": 10,
+                        "consumer_call_file": "f.php",
+                        "consumer_call_line": 10,
                         "consumer_call_kind": None,
                         "consumer_target_id": "m:1",
                         "consumer_target_fqn": "M::do",
                         "consumer_target_name": "do",
                         "consumer_target_kind": "Method",
                         "consumer_target_signature": None,
-                        "arg_position": 0, "arg_expression": "$x",
+                        "arg_position": 0,
+                        "arg_expression": "$x",
                         "assigned_local_id": None,
                     },
                     {
                         "access_call_id": "access:2",
-                        "access_call_file": "f.php", "access_call_line": 6,
+                        "access_call_file": "f.php",
+                        "access_call_line": 6,
                         "access_call_kind": None,
-                        "target_id": "p:2", "target_fqn": "X::$b",
-                        "target_name": "$b", "target_kind": "Property",
+                        "target_id": "p:2",
+                        "target_fqn": "X::$b",
+                        "target_name": "$b",
+                        "target_kind": "Property",
                         "result_id": "r:2",
                         "consumer_call_id": "consumer:1",
-                        "consumer_call_file": "f.php", "consumer_call_line": 10,
+                        "consumer_call_file": "f.php",
+                        "consumer_call_line": 10,
                         "consumer_call_kind": None,
                         "consumer_target_id": "m:1",
                         "consumer_target_fqn": "M::do",
                         "consumer_target_name": "do",
                         "consumer_target_kind": "Method",
                         "consumer_target_signature": None,
-                        "arg_position": 1, "arg_expression": "$y",
+                        "arg_position": 1,
+                        "arg_expression": "$y",
                         "assigned_local_id": None,
                     },
                 ],
@@ -624,22 +700,37 @@ class TestCrossIntoCallee:
         def mock_execute(query, **kwargs):
             q = query.strip()
             if Q4_ARGUMENT_PARAMS.strip() in q:
-                return [{"parameter_fqn": "Target::process::$input", "value_id": "v:arg", "position": 0, "expression": "$data"}]
+                return [
+                    {
+                        "parameter_fqn": "Target::process::$input",
+                        "value_id": "v:arg",
+                        "position": 0,
+                        "expression": "$data",
+                    }
+                ]
             if Q1_RECEIVER_CHAIN.strip() in q:
                 return [
                     {
                         "access_call_id": "inner:call:1",
-                        "access_call_file": "f.php", "access_call_line": 20,
+                        "access_call_file": "f.php",
+                        "access_call_line": 20,
                         "access_call_kind": None,
-                        "target_id": "p:inner", "target_fqn": "X::$val",
-                        "target_name": "$val", "target_kind": "Property",
+                        "target_id": "p:inner",
+                        "target_fqn": "X::$val",
+                        "target_name": "$val",
+                        "target_kind": "Property",
                         "result_id": None,
-                        "consumer_call_id": None, "consumer_call_file": None,
-                        "consumer_call_line": None, "consumer_call_kind": None,
-                        "consumer_target_id": None, "consumer_target_fqn": None,
-                        "consumer_target_name": None, "consumer_target_kind": None,
+                        "consumer_call_id": None,
+                        "consumer_call_file": None,
+                        "consumer_call_line": None,
+                        "consumer_call_kind": None,
+                        "consumer_target_id": None,
+                        "consumer_target_fqn": None,
+                        "consumer_target_name": None,
+                        "consumer_target_kind": None,
                         "consumer_target_signature": None,
-                        "arg_position": None, "arg_expression": None,
+                        "arg_position": None,
+                        "arg_expression": None,
                         "assigned_local_id": None,
                     },
                 ]
@@ -661,7 +752,14 @@ class TestCrossIntoCallee:
 
         visited: set[str] = set()
         cross_into_callee(
-            runner, "call:outer", "m:target", entry, 1, 3, 100, visited,
+            runner,
+            "call:outer",
+            "m:target",
+            entry,
+            1,
+            3,
+            100,
+            visited,
         )
         assert len(entry.children) >= 1
         # Children should have crossed_from set
@@ -693,7 +791,14 @@ class TestCrossIntoCallee:
 
         visited: set[str] = set()
         cross_into_callee(
-            runner, "call:outer", "m:target", entry, 1, 3, 100, visited,
+            runner,
+            "call:outer",
+            "m:target",
+            entry,
+            1,
+            3,
+            100,
+            visited,
         )
         # local:1 should be added to visited (even if no children found)
         assert "local:1" in visited
@@ -712,7 +817,13 @@ class TestCrossIntoCallersViaReturn:
         entry = ContextEntry(depth=3, node_id="x", fqn="X", children=[])
         runner = MagicMock()
         cross_into_callers_via_return(
-            runner, "call:1", entry, 3, 3, 100, set(),
+            runner,
+            "call:1",
+            entry,
+            3,
+            3,
+            100,
+            set(),
         )
         assert entry.children == []
         # Should not call any queries
@@ -723,8 +834,15 @@ class TestCrossIntoCallersViaReturn:
         entry = ContextEntry(depth=1, node_id="x", fqn="X", children=[])
         runner = MagicMock()
         cross_into_callers_via_return(
-            runner, "call:1", entry, 1, 3, 100, set(),
-            crossing_count=10, max_crossings=10,
+            runner,
+            "call:1",
+            entry,
+            1,
+            3,
+            100,
+            set(),
+            crossing_count=10,
+            max_crossings=10,
         )
         assert entry.children == []
 
@@ -734,7 +852,13 @@ class TestCrossIntoCallersViaReturn:
         runner = MagicMock()
         runner.execute_single.return_value = {"result_id": None, "local_id": None}
         cross_into_callers_via_return(
-            runner, "call:1", entry, 1, 3, 100, set(),
+            runner,
+            "call:1",
+            entry,
+            1,
+            3,
+            100,
+            set(),
         )
         assert entry.children == []
 
@@ -754,7 +878,13 @@ class TestCrossIntoCallersViaReturn:
         runner = MagicMock()
         runner.execute_single.side_effect = mock_single
         cross_into_callers_via_return(
-            runner, "call:1", entry, 1, 3, 100, set(),
+            runner,
+            "call:1",
+            entry,
+            1,
+            3,
+            100,
+            set(),
         )
         assert entry.children == []
 
@@ -773,7 +903,13 @@ class TestCrossIntoCallersViaReturn:
         runner = MagicMock()
         runner.execute_single.side_effect = mock_single
         cross_into_callers_via_return(
-            runner, "call:1", entry, 1, 3, 100, set(),
+            runner,
+            "call:1",
+            entry,
+            1,
+            3,
+            100,
+            set(),
         )
         assert entry.children == []
 
@@ -797,7 +933,13 @@ class TestCrossIntoCallersViaReturn:
 
         visited = {"return_crossing:m:container"}
         cross_into_callers_via_return(
-            runner, "call:1", entry, 1, 3, 100, visited,
+            runner,
+            "call:1",
+            entry,
+            1,
+            3,
+            100,
+            visited,
         )
         assert entry.children == []
 
@@ -831,7 +973,13 @@ class TestCrossIntoCallersViaReturn:
 
         visited: set[str] = set()
         cross_into_callers_via_return(
-            runner, "call:1", entry, 1, 3, 100, visited,
+            runner,
+            "call:1",
+            entry,
+            1,
+            3,
+            100,
+            visited,
         )
         assert entry.children == []
         # method_key should NOT be added to visited since no match found
@@ -879,7 +1027,13 @@ class TestCrossIntoCallersViaReturn:
 
         visited: set[str] = set()
         cross_into_callers_via_return(
-            runner, "call:main", entry, 1, 3, 100, visited,
+            runner,
+            "call:main",
+            entry,
+            1,
+            3,
+            100,
+            visited,
         )
         # Method key should be added (lazy marking)
         assert "return_crossing:m:container" in visited
@@ -914,12 +1068,20 @@ class TestValueSourceChain:
                     {
                         "value_kind": "parameter",
                         "value_fqn": "A::run::$input",
-                        "source_id": None, "source_kind": None,
-                        "call_id": None, "call_file": None, "call_line": None,
-                        "call_kind": None, "callee_id": None, "callee_fqn": None,
-                        "callee_name": None, "callee_kind": None,
-                        "callee_signature": None, "recv_value_kind": None,
-                        "recv_name": None, "recv_prop_fqn": None,
+                        "source_id": None,
+                        "source_kind": None,
+                        "call_id": None,
+                        "call_file": None,
+                        "call_line": None,
+                        "call_kind": None,
+                        "callee_id": None,
+                        "callee_fqn": None,
+                        "callee_name": None,
+                        "callee_kind": None,
+                        "callee_signature": None,
+                        "recv_value_kind": None,
+                        "recv_name": None,
+                        "recv_prop_fqn": None,
                     },
                 ],
                 Q10_PARAMETER_USES: [],
@@ -1005,14 +1167,17 @@ class TestValueSourceChain:
                         "source_id": "s:1",
                         "source_kind": "result",
                         "call_id": "c:1",
-                        "call_file": "f.php", "call_line": 5,
+                        "call_file": "f.php",
+                        "call_line": 5,
                         "call_kind": None,
                         "callee_id": None,
                         "callee_fqn": None,
-                        "callee_name": None, "callee_kind": None,
+                        "callee_name": None,
+                        "callee_kind": None,
                         "callee_signature": None,
                         "recv_value_kind": None,
-                        "recv_name": None, "recv_prop_fqn": None,
+                        "recv_name": None,
+                        "recv_prop_fqn": None,
                     },
                 ],
             },
@@ -1031,7 +1196,8 @@ class TestValueSourceChain:
                         "source_id": "s:1",
                         "source_kind": "result",
                         "call_id": "c:1",
-                        "call_file": "f.php", "call_line": 5,
+                        "call_file": "f.php",
+                        "call_line": 5,
                         "call_kind": None,
                         "callee_id": "m:get",
                         "callee_fqn": "Svc::get",
@@ -1095,27 +1261,39 @@ class TestParameterUses:
             execute_map={
                 Q10_PARAMETER_USES: [
                     {
-                        "call_id": "c:2", "call_file": "src/B.php", "call_line": 5,
-                        "value_id": "v:2", "value_kind": "local",
-                        "value_name": "$b", "value_fqn": None,
-                        "scope_id": "m:b", "scope_fqn": "B::run",
-                        "scope_kind": "Method", "scope_signature": None,
-                        "position": 0, "expression": "$b",
+                        "call_id": "c:2",
+                        "call_file": "src/B.php",
+                        "call_line": 5,
+                        "value_id": "v:2",
+                        "value_kind": "local",
+                        "value_name": "$b",
+                        "value_fqn": None,
+                        "scope_id": "m:b",
+                        "scope_fqn": "B::run",
+                        "scope_kind": "Method",
+                        "scope_signature": None,
+                        "position": 0,
+                        "expression": "$b",
                     },
                     {
-                        "call_id": "c:1", "call_file": "src/A.php", "call_line": 10,
-                        "value_id": "v:1", "value_kind": "local",
-                        "value_name": "$a", "value_fqn": None,
-                        "scope_id": "m:a", "scope_fqn": "A::run",
-                        "scope_kind": "Method", "scope_signature": None,
-                        "position": 0, "expression": "$a",
+                        "call_id": "c:1",
+                        "call_file": "src/A.php",
+                        "call_line": 10,
+                        "value_id": "v:1",
+                        "value_kind": "local",
+                        "value_name": "$a",
+                        "value_fqn": None,
+                        "scope_id": "m:a",
+                        "scope_fqn": "A::run",
+                        "scope_kind": "Method",
+                        "scope_signature": None,
+                        "position": 0,
+                        "expression": "$a",
                     },
                 ],
             },
         )
-        entries = build_parameter_uses(
-            runner, "val:p", "X::$p", 1, 1, 100, set()
-        )
+        entries = build_parameter_uses(runner, "val:p", "X::$p", 1, 1, 100, set())
         assert entries[0].file == "src/A.php"
         assert entries[1].file == "src/B.php"
 
@@ -1124,36 +1302,48 @@ class TestParameterUses:
             execute_map={
                 Q10_PARAMETER_USES: [
                     {
-                        "call_id": f"c:{i}", "call_file": f"f{i}.php", "call_line": i,
-                        "value_id": f"v:{i}", "value_kind": "local",
-                        "value_name": f"$x{i}", "value_fqn": None,
-                        "scope_id": f"m:{i}", "scope_fqn": f"M{i}::run",
-                        "scope_kind": "Method", "scope_signature": None,
-                        "position": 0, "expression": f"$x{i}",
+                        "call_id": f"c:{i}",
+                        "call_file": f"f{i}.php",
+                        "call_line": i,
+                        "value_id": f"v:{i}",
+                        "value_kind": "local",
+                        "value_name": f"$x{i}",
+                        "value_fqn": None,
+                        "scope_id": f"m:{i}",
+                        "scope_fqn": f"M{i}::run",
+                        "scope_kind": "Method",
+                        "scope_signature": None,
+                        "position": 0,
+                        "expression": f"$x{i}",
                     }
                     for i in range(5)
                 ],
             },
         )
-        entries = build_parameter_uses(
-            runner, "val:p", "X::$p", 1, 1, 2, set()
-        )
+        entries = build_parameter_uses(runner, "val:p", "X::$p", 1, 1, 2, set())
         assert len(entries) == 2
 
     def test_depth_expansion_traces_argument_source(self):
         """At depth < max_depth, traces the caller's argument Value source."""
+
         def mock_execute(query, **kwargs):
             q = query.strip()
             if Q10_PARAMETER_USES.strip() in q:
                 return [
                     {
-                        "call_id": "c:1", "call_file": "f.php", "call_line": 5,
+                        "call_id": "c:1",
+                        "call_file": "f.php",
+                        "call_line": 5,
                         "value_id": "val:caller_arg",
                         "value_kind": "local",
-                        "value_name": "$data", "value_fqn": "A::run::$data",
-                        "scope_id": "m:run", "scope_fqn": "A::run",
-                        "scope_kind": "Method", "scope_signature": None,
-                        "position": 0, "expression": "$data",
+                        "value_name": "$data",
+                        "value_fqn": "A::run::$data",
+                        "scope_id": "m:run",
+                        "scope_fqn": "A::run",
+                        "scope_kind": "Method",
+                        "scope_signature": None,
+                        "position": 0,
+                        "expression": "$data",
                     },
                 ]
             if Q9_SOURCE_CHAIN.strip() in q:
@@ -1161,9 +1351,11 @@ class TestParameterUses:
                     {
                         "value_kind": "local",
                         "value_fqn": "A::run::$data",
-                        "source_id": "s:1", "source_kind": "result",
+                        "source_id": "s:1",
+                        "source_kind": "result",
                         "call_id": "call:create",
-                        "call_file": "f.php", "call_line": 3,
+                        "call_file": "f.php",
+                        "call_line": 3,
                         "call_kind": "constructor",
                         "callee_id": "cls:Order",
                         "callee_fqn": "App\\Order",
@@ -1171,7 +1363,8 @@ class TestParameterUses:
                         "callee_kind": "Class",
                         "callee_signature": None,
                         "recv_value_kind": None,
-                        "recv_name": None, "recv_prop_fqn": None,
+                        "recv_name": None,
+                        "recv_prop_fqn": None,
                     },
                 ]
             if Q11_CALL_ARGUMENTS.strip() in q:
@@ -1182,9 +1375,7 @@ class TestParameterUses:
         runner.execute.side_effect = mock_execute
         runner.execute_single.return_value = None
 
-        entries = build_parameter_uses(
-            runner, "val:p", "X::$p", 1, 3, 100, set()
-        )
+        entries = build_parameter_uses(runner, "val:p", "X::$p", 1, 3, 100, set())
         assert len(entries) == 1
         assert len(entries[0].children) == 1
         assert entries[0].children[0].fqn == "App\\Order"
@@ -1240,39 +1431,49 @@ class TestConsumerChainMixed:
                     # Part 1: receiver with consumer
                     {
                         "access_call_id": "access:1",
-                        "access_call_file": "f.php", "access_call_line": 5,
+                        "access_call_file": "f.php",
+                        "access_call_line": 5,
                         "access_call_kind": None,
-                        "target_id": "p:1", "target_fqn": "X::$id",
-                        "target_name": "$id", "target_kind": "Property",
+                        "target_id": "p:1",
+                        "target_fqn": "X::$id",
+                        "target_name": "$id",
+                        "target_kind": "Property",
                         "result_id": "r:1",
                         "consumer_call_id": "consumer:1",
-                        "consumer_call_file": "f.php", "consumer_call_line": 10,
+                        "consumer_call_file": "f.php",
+                        "consumer_call_line": 10,
                         "consumer_call_kind": None,
                         "consumer_target_id": "m:send",
                         "consumer_target_fqn": "N::send",
                         "consumer_target_name": "send",
                         "consumer_target_kind": "Method",
                         "consumer_target_signature": None,
-                        "arg_position": 0, "arg_expression": "$x->id",
+                        "arg_position": 0,
+                        "arg_expression": "$x->id",
                         "assigned_local_id": None,
                     },
                     # Part 2: standalone access
                     {
                         "access_call_id": "access:2",
-                        "access_call_file": "f.php", "access_call_line": 15,
+                        "access_call_file": "f.php",
+                        "access_call_line": 15,
                         "access_call_kind": "property_access",
-                        "target_id": "p:2", "target_fqn": "X::$name",
-                        "target_name": "$name", "target_kind": "Property",
+                        "target_id": "p:2",
+                        "target_fqn": "X::$name",
+                        "target_name": "$name",
+                        "target_kind": "Property",
                         "result_id": "r:2",
                         "consumer_call_id": None,
-                        "consumer_call_file": None, "consumer_call_line": None,
+                        "consumer_call_file": None,
+                        "consumer_call_line": None,
                         "consumer_call_kind": None,
                         "consumer_target_id": None,
                         "consumer_target_fqn": None,
                         "consumer_target_name": None,
                         "consumer_target_kind": None,
                         "consumer_target_signature": None,
-                        "arg_position": None, "arg_expression": None,
+                        "arg_position": None,
+                        "arg_expression": None,
                         "assigned_local_id": None,
                     },
                 ],
@@ -1307,20 +1508,25 @@ class TestConsumerChainMixed:
                 Q1_RECEIVER_CHAIN: [
                     {
                         "access_call_id": "access:1",
-                        "access_call_file": "f.php", "access_call_line": 5,
+                        "access_call_file": "f.php",
+                        "access_call_line": 5,
                         "access_call_kind": None,
-                        "target_id": "p:1", "target_fqn": "X::$id",
-                        "target_name": "$id", "target_kind": "Property",
+                        "target_id": "p:1",
+                        "target_fqn": "X::$id",
+                        "target_name": "$id",
+                        "target_kind": "Property",
                         "result_id": "r:1",
                         "consumer_call_id": "shared:call",
-                        "consumer_call_file": "f.php", "consumer_call_line": 10,
+                        "consumer_call_file": "f.php",
+                        "consumer_call_line": 10,
                         "consumer_call_kind": None,
                         "consumer_target_id": "m:do",
                         "consumer_target_fqn": "S::do",
                         "consumer_target_name": "do",
                         "consumer_target_kind": "Method",
                         "consumer_target_signature": None,
-                        "arg_position": 0, "arg_expression": "$x",
+                        "arg_position": 0,
+                        "arg_expression": "$x",
                         "assigned_local_id": None,
                     },
                 ],
@@ -1420,12 +1626,20 @@ class TestSourceChainNoData:
                     {
                         "value_kind": "local",
                         "value_fqn": "A::$x",
-                        "source_id": None, "source_kind": None,
-                        "call_id": None, "call_file": None, "call_line": None,
-                        "call_kind": None, "callee_id": None, "callee_fqn": None,
-                        "callee_name": None, "callee_kind": None,
-                        "callee_signature": None, "recv_value_kind": None,
-                        "recv_name": None, "recv_prop_fqn": None,
+                        "source_id": None,
+                        "source_kind": None,
+                        "call_id": None,
+                        "call_file": None,
+                        "call_line": None,
+                        "call_kind": None,
+                        "callee_id": None,
+                        "callee_fqn": None,
+                        "callee_name": None,
+                        "callee_kind": None,
+                        "callee_signature": None,
+                        "recv_value_kind": None,
+                        "recv_name": None,
+                        "recv_prop_fqn": None,
                     },
                 ],
             },

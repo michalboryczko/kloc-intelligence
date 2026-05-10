@@ -1,12 +1,12 @@
 """Tests for definition builders with mock data (no Neo4j)."""
 
 from src.logic.definition import (
-    build_definition,
-    build_method_definition,
-    build_class_definition,
-    build_interface_definition,
-    build_property_definition,
     build_argument_definition,
+    build_class_definition,
+    build_definition,
+    build_interface_definition,
+    build_method_definition,
+    build_property_definition,
     build_value_definition,
     parse_property_doc,
 )
@@ -183,7 +183,7 @@ class TestBuildClassDefinition:
                     "node_id": "p1",
                     "kind": "Property",
                     "name": "$email",
-                    "documentation": ['```php\npublic string $email\n```'],
+                    "documentation": ["```php\npublic string $email\n```"],
                 },
             ],
             "child_type_hints": {},
@@ -276,7 +276,7 @@ class TestBuildClassDefinition:
                     "node_id": "p1",
                     "kind": "Property",
                     "name": "$service",
-                    "documentation": ['```php\nprivate readonly Service $service\n```'],
+                    "documentation": ["```php\nprivate readonly Service $service\n```"],
                 },
             ],
             "child_type_hints": {
@@ -301,7 +301,7 @@ class TestBuildClassDefinition:
                     "node_id": "p1",
                     "kind": "Property",
                     "name": "$count",
-                    "documentation": ['```php\nprivate int $count\n```'],
+                    "documentation": ["```php\nprivate int $count\n```"],
                 },
             ],
             "child_type_hints": {},
@@ -337,12 +337,21 @@ class TestBuildClassDefinition:
         data = {
             "node": _make_node(kind="Interface", fqn="App\\FooInterface"),
             "children": [
-                {"node_id": "m1", "kind": "Method", "name": "process", "signature": "process(): void"},
+                {
+                    "node_id": "m1",
+                    "kind": "Method",
+                    "name": "process",
+                    "signature": "process(): void",
+                },
             ],
             "child_type_hints": {},
             "overrides": {},
             "promoted_properties": set(),
-            "inheritance": {"extends_fqn": "App\\BaseInterface", "implements_fqns": [], "uses_trait_fqns": []},
+            "inheritance": {
+                "extends_fqn": "App\\BaseInterface",
+                "implements_fqns": [],
+                "uses_trait_fqns": [],
+            },
         }
         info = DefinitionInfo(fqn="App\\FooInterface", kind="Interface")
         build_class_definition(data, info)
@@ -402,7 +411,7 @@ class TestBuildPropertyDefinition:
                 name="$email",
                 fqn="App\\Foo::$email",
                 node_id="p1",
-                documentation=['```php\nprivate string $email\n```'],
+                documentation=["```php\nprivate string $email\n```"],
             ),
             "type_hints": [],
             "promoted_properties": set(),
@@ -420,7 +429,7 @@ class TestBuildPropertyDefinition:
                 name="$instance",
                 fqn="App\\Foo::$instance",
                 node_id="p1",
-                documentation=['```php\nprivate static readonly Foo $instance\n```'],
+                documentation=["```php\nprivate static readonly Foo $instance\n```"],
             ),
             "type_hints": [],
             "promoted_properties": set(),
@@ -433,7 +442,9 @@ class TestBuildPropertyDefinition:
 
     def test_promoted_property(self):
         data = {
-            "node": _make_node(kind="Property", name="$service", fqn="App\\Foo::$service", node_id="p1"),
+            "node": _make_node(
+                kind="Property", name="$service", fqn="App\\Foo::$service", node_id="p1"
+            ),
             "type_hints": [{"fqn": "App\\Service", "name": "Service"}],
             "promoted_properties": {"p1"},
             "parent": None,
@@ -517,7 +528,12 @@ class TestBuildValueDefinition:
         data = {
             "node": _make_node(kind="Value", value_kind="local"),
             "value_source": {
-                "af": {"kind": "Property", "fqn": "App\\Foo::$bar", "file": "f.php", "start_line": 5},
+                "af": {
+                    "kind": "Property",
+                    "fqn": "App\\Foo::$bar",
+                    "file": "f.php",
+                    "start_line": 5,
+                },
                 "call": None,
                 "callee": None,
             },
@@ -580,9 +596,7 @@ class TestParsePropertyDoc:
     """Test parse_property_doc function."""
 
     def test_public_string(self):
-        vis, ro, static, dtype = parse_property_doc(
-            ['```php\npublic string $email\n```'], "$email"
-        )
+        vis, ro, static, dtype = parse_property_doc(["```php\npublic string $email\n```"], "$email")
         assert vis == "public"
         assert dtype == "string"
         assert ro is False
@@ -590,7 +604,7 @@ class TestParsePropertyDoc:
 
     def test_private_readonly(self):
         vis, ro, static, dtype = parse_property_doc(
-            ['```php\nprivate readonly \\App\\Service $service\n```'], "$service"
+            ["```php\nprivate readonly \\App\\Service $service\n```"], "$service"
         )
         assert vis == "private"
         assert ro is True
@@ -598,16 +612,14 @@ class TestParsePropertyDoc:
 
     def test_private_static(self):
         vis, ro, static, dtype = parse_property_doc(
-            ['```php\nprivate static array $items = []\n```'], "$items"
+            ["```php\nprivate static array $items = []\n```"], "$items"
         )
         assert vis == "private"
         assert static is True
         assert dtype == "array"
 
     def test_protected(self):
-        vis, ro, static, dtype = parse_property_doc(
-            ['```php\nprotected int $count\n```'], "$count"
-        )
+        vis, ro, static, dtype = parse_property_doc(["```php\nprotected int $count\n```"], "$count")
         assert vis == "protected"
         assert dtype == "int"
 
@@ -623,14 +635,14 @@ class TestParsePropertyDoc:
 
     def test_namespace_prefix_stripped(self):
         vis, ro, static, dtype = parse_property_doc(
-            ['```php\npublic \\App\\Entity\\User $user\n```'], "$user"
+            ["```php\npublic \\App\\Entity\\User $user\n```"], "$user"
         )
         assert dtype == "User"
 
     def test_no_matching_name(self):
         """If the property name is not in the doc line, skip it."""
         vis, ro, static, dtype = parse_property_doc(
-            ['```php\npublic string $other\n```'], "$missing"
+            ["```php\npublic string $other\n```"], "$missing"
         )
         assert vis is None
         assert dtype is None

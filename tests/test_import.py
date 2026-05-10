@@ -1,21 +1,23 @@
 """Tests for sot.json parser and Neo4j import pipeline."""
 
-import pytest
 from pathlib import Path
 
+import pytest
+
 from src.db.importer import (
-    load_sot,
-    extract_signature,
-    node_to_props,
-    edge_to_props,
-    parse_sot,
-    import_nodes,
-    import_edges,
-    validate_import,
+    EdgeSpec,
     ImportValidationError,
     NodeSpec,
-    EdgeSpec,
+    edge_to_props,
+    extract_signature,
+    import_edges,
+    import_nodes,
+    load_sot,
+    node_to_props,
+    parse_sot,
+    validate_import,
 )
+
 from .conftest import requires_neo4j
 
 SOT_PATH = Path("/Users/michal/dev/ai/kloc/artifacts/kloc-dev/context-final/sot.json")
@@ -57,8 +59,18 @@ class TestParseSot:
         types = {e.type for e in data.edges}
         # Dataset has 12 of 13 types (no return_type)
         expected = {
-            "contains", "uses", "extends", "implements", "overrides", "type_hint",
-            "calls", "receiver", "argument", "produces", "assigned_from", "type_of",
+            "contains",
+            "uses",
+            "extends",
+            "implements",
+            "overrides",
+            "type_hint",
+            "calls",
+            "receiver",
+            "argument",
+            "produces",
+            "assigned_from",
+            "type_of",
         }
         assert expected.issubset(types), f"Missing types: {expected - types}"
 
@@ -410,16 +422,12 @@ class TestImportIntegration:
 
         with neo4j_connection.session() as session:
             # Check that Method nodes have both :Node and :Method labels
-            result = session.run(
-                "MATCH (n:Method) RETURN count(n) AS cnt"
-            ).single()["cnt"]
+            result = session.run("MATCH (n:Method) RETURN count(n) AS cnt").single()["cnt"]
             method_count = sum(1 for n in nodes if n["kind"] == "Method")
             assert result == method_count
 
             # Check Class label
-            result = session.run(
-                "MATCH (n:Class) RETURN count(n) AS cnt"
-            ).single()["cnt"]
+            result = session.run("MATCH (n:Class) RETURN count(n) AS cnt").single()["cnt"]
             class_count = sum(1 for n in nodes if n["kind"] == "Class")
             assert result == class_count
 
@@ -435,8 +443,7 @@ class TestImportIntegration:
 
         with neo4j_connection.session() as session:
             result = session.run(
-                "MATCH (n:Method) WHERE n.signature IS NOT NULL "
-                "RETURN count(n) AS cnt"
+                "MATCH (n:Method) WHERE n.signature IS NOT NULL RETURN count(n) AS cnt"
             ).single()["cnt"]
             # At least some methods should have signatures
             assert result > 0
@@ -472,6 +479,7 @@ class TestImportCLI:
     def test_import_command(self, neo4j_connection):
         """Test that the CLI import command runs successfully."""
         from typer.testing import CliRunner
+
         from src.cli import app
         from src.db.schema import drop_all
 
@@ -488,6 +496,7 @@ class TestImportCLI:
     def test_import_command_no_validate(self, neo4j_connection):
         """Test import command with --no-validate flag."""
         from typer.testing import CliRunner
+
         from src.cli import app
         from src.db.schema import drop_all
 

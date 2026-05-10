@@ -16,7 +16,6 @@ Key design rules:
 
 from __future__ import annotations
 
-from ..db.query_runner import QueryRunner
 from ..db.queries.context_value import (
     Q4_ARGUMENT_PARAMS,
     Q5_RESOLVE_PARAM,
@@ -29,7 +28,8 @@ from ..db.queries.context_value import (
     fetch_value_consumer_data,
     fetch_value_source_data,
 )
-from ..models.results import ContextEntry, MemberRef, ArgumentInfo
+from ..db.query_runner import QueryRunner
+from ..models.results import ArgumentInfo, ContextEntry, MemberRef
 
 # Query to get Call node call_kind for implicit $this detection
 _Q_CALL_KIND = """
@@ -188,16 +188,18 @@ def _build_arguments_from_records(
             if value_node_id:
                 source_chain = _trace_source_chain(runner, value_node_id)
 
-        infos.append(ArgumentInfo(
-            position=int(position),
-            param_name=param_name,
-            param_fqn=param_fqn,
-            value_expr=rec.get("expression"),
-            value_source=value_kind,
-            value_type=rec.get("value_type"),
-            value_ref_symbol=value_ref_symbol,
-            source_chain=source_chain,
-        ))
+        infos.append(
+            ArgumentInfo(
+                position=int(position),
+                param_name=param_name,
+                param_fqn=param_fqn,
+                value_expr=rec.get("expression"),
+                value_source=value_kind,
+                value_type=rec.get("value_type"),
+                value_ref_symbol=value_ref_symbol,
+                source_chain=source_chain,
+            )
+        )
     infos.sort(key=lambda a: a.position)
     return infos
 
@@ -229,7 +231,8 @@ def _resolve_on_kind(recv_value_kind: str | None) -> str | None:
 
 
 def _resolve_call_on(
-    runner: QueryRunner, call_id: str,
+    runner: QueryRunner,
+    call_id: str,
 ) -> tuple[str | None, str | None, str | None, str | None, int | None]:
     """Resolve on/on_kind for a Call node.
 
@@ -246,21 +249,39 @@ def _resolve_call_on(
 
     recv_rec = runner.execute_single(Q3_RECEIVER_IDENTITY, call_id=call_id)
     if recv_rec:
-        recv_kind = recv_rec.get("recv_kind") if isinstance(recv_rec, dict) else recv_rec["recv_kind"]
-        recv_name = recv_rec.get("recv_name") if isinstance(recv_rec, dict) else recv_rec["recv_name"]
-        recv_file = recv_rec.get("recv_file") if isinstance(recv_rec, dict) else recv_rec["recv_file"]
-        recv_start_line = recv_rec.get("recv_start_line") if isinstance(recv_rec, dict) else recv_rec["recv_start_line"]
+        recv_kind = (
+            recv_rec.get("recv_kind") if isinstance(recv_rec, dict) else recv_rec["recv_kind"]
+        )
+        recv_name = (
+            recv_rec.get("recv_name") if isinstance(recv_rec, dict) else recv_rec["recv_name"]
+        )
+        recv_file = (
+            recv_rec.get("recv_file") if isinstance(recv_rec, dict) else recv_rec["recv_file"]
+        )
+        recv_start_line = (
+            recv_rec.get("recv_start_line")
+            if isinstance(recv_rec, dict)
+            else recv_rec["recv_start_line"]
+        )
         prop_fqn = recv_rec.get("prop_fqn") if isinstance(recv_rec, dict) else recv_rec["prop_fqn"]
-        prop_name = recv_rec.get("prop_name") if isinstance(recv_rec, dict) else recv_rec["prop_name"]
-        src_recv_kind = recv_rec.get("src_recv_kind") if isinstance(recv_rec, dict) else recv_rec["src_recv_kind"]
-        src_recv_name = recv_rec.get("src_recv_name") if isinstance(recv_rec, dict) else recv_rec["src_recv_name"]
+        prop_name = (
+            recv_rec.get("prop_name") if isinstance(recv_rec, dict) else recv_rec["prop_name"]
+        )
+        src_recv_kind = (
+            recv_rec.get("src_recv_kind")
+            if isinstance(recv_rec, dict)
+            else recv_rec["src_recv_kind"]
+        )
+        src_recv_name = (
+            recv_rec.get("src_recv_name")
+            if isinstance(recv_rec, dict)
+            else recv_rec["src_recv_name"]
+        )
         if recv_kind == "result" and prop_fqn and prop_name:
             member = prop_name.lstrip("$")
             if src_recv_kind == "self" or src_recv_kind is None:
                 on = f"$this->{member}"
-            elif src_recv_kind == "parameter":
-                on = f"{src_recv_name}->{member}"
-            elif src_recv_kind == "local":
+            elif src_recv_kind == "parameter" or src_recv_kind == "local":
                 on = f"{src_recv_name}->{member}"
             else:
                 on = f"$this->{member}"
@@ -371,22 +392,24 @@ def build_value_consumer_chain(
             # Result is consumed as argument by another Call
             if consumer_call_id not in consumer_groups:
                 consumer_groups[consumer_call_id] = []
-            consumer_groups[consumer_call_id].append({
-                "prop_name": rec.get("target_name", "?"),
-                "prop_fqn": rec.get("target_fqn"),
-                "position": rec.get("arg_position", 0),
-                "expression": rec.get("arg_expression"),
-                "access_call_id": access_call_id,
-                "access_call_line": rec.get("access_call_line"),
-                "consumer_target_id": rec.get("consumer_target_id"),
-                "consumer_target_fqn": rec.get("consumer_target_fqn"),
-                "consumer_target_name": rec.get("consumer_target_name"),
-                "consumer_target_kind": rec.get("consumer_target_kind"),
-                "consumer_target_signature": rec.get("consumer_target_signature"),
-                "consumer_call_file": rec.get("consumer_call_file"),
-                "consumer_call_line": rec.get("consumer_call_line"),
-                "consumer_call_kind": rec.get("consumer_call_kind"),
-            })
+            consumer_groups[consumer_call_id].append(
+                {
+                    "prop_name": rec.get("target_name", "?"),
+                    "prop_fqn": rec.get("target_fqn"),
+                    "position": rec.get("arg_position", 0),
+                    "expression": rec.get("arg_expression"),
+                    "access_call_id": access_call_id,
+                    "access_call_line": rec.get("access_call_line"),
+                    "consumer_target_id": rec.get("consumer_target_id"),
+                    "consumer_target_fqn": rec.get("consumer_target_fqn"),
+                    "consumer_target_name": rec.get("consumer_target_name"),
+                    "consumer_target_kind": rec.get("consumer_target_kind"),
+                    "consumer_target_signature": rec.get("consumer_target_signature"),
+                    "consumer_call_file": rec.get("consumer_call_file"),
+                    "consumer_call_line": rec.get("consumer_call_line"),
+                    "consumer_call_kind": rec.get("consumer_call_kind"),
+                }
+            )
             found_consumer = True
 
         if not found_consumer and assigned_local_id:
@@ -424,22 +447,28 @@ def build_value_consumer_chain(
         callee = _build_callee_display(consumer_target_name, consumer_target_kind)
 
         # Resolve on/on_kind for the consumer call (Q3 + implicit $this fallback)
-        consumer_on, consumer_on_kind, access_chain_symbol, on_file, on_line = _resolve_call_on(runner, consumer_call_id)
+        consumer_on, consumer_on_kind, access_chain_symbol, on_file, on_line = _resolve_call_on(
+            runner, consumer_call_id
+        )
 
         # Build member_ref for correct console rendering order (arrow before tag)
-        member_ref = MemberRef(
-            target_name=callee or "",
-            target_fqn=consumer_target_fqn,
-            target_kind=consumer_target_kind,
-            file=call_file,
-            line=call_line,
-            reference_type=ref_type,
-            access_chain=consumer_on,
-            access_chain_symbol=access_chain_symbol,
-            on_kind=consumer_on_kind,
-            on_file=on_file,
-            on_line=on_line,
-        ) if consumer_target_fqn else None
+        member_ref = (
+            MemberRef(
+                target_name=callee or "",
+                target_fqn=consumer_target_fqn,
+                target_kind=consumer_target_kind,
+                file=call_file,
+                line=call_line,
+                reference_type=ref_type,
+                access_chain=consumer_on,
+                access_chain_symbol=access_chain_symbol,
+                on_kind=consumer_on_kind,
+                on_file=on_file,
+                on_line=on_line,
+            )
+            if consumer_target_fqn
+            else None
+        )
 
         entry = ContextEntry(
             depth=depth,
@@ -459,11 +488,22 @@ def build_value_consumer_chain(
         )
 
         # Depth expansion: cross into callee
-        if depth < max_depth and consumer_target_id and consumer_target_kind in ("Method", "Function"):
+        if (
+            depth < max_depth
+            and consumer_target_id
+            and consumer_target_kind in ("Method", "Function")
+        ):
             cross_into_callee(
-                runner, consumer_call_id, consumer_target_id,
-                entry, depth, max_depth, limit, visited,
-                crossing_count=crossing_count, max_crossings=max_crossings,
+                runner,
+                consumer_call_id,
+                consumer_target_id,
+                entry,
+                depth,
+                max_depth,
+                limit,
+                visited,
+                crossing_count=crossing_count,
+                max_crossings=max_crossings,
             )
 
         count += 1
@@ -495,26 +535,32 @@ def build_value_consumer_chain(
         arguments = _build_arguments_from_records(runner, access_call_id)
 
         # Resolve on/on_kind for standalone access (Q3 + implicit $this fallback)
-        standalone_on, standalone_on_kind, access_chain_symbol, on_file, on_line = _resolve_call_on(runner, access_call_id)
+        standalone_on, standalone_on_kind, access_chain_symbol, on_file, on_line = _resolve_call_on(
+            runner, access_call_id
+        )
         # Fall back to value-level on/on_kind if Q3 doesn't resolve
         if standalone_on is None:
             standalone_on = value_on
             standalone_on_kind = value_on_kind
 
         # Build member_ref for correct console rendering order (arrow before tag)
-        member_ref = MemberRef(
-            target_name=callee or "",
-            target_fqn=target_fqn,
-            target_kind=target_kind,
-            file=call_file,
-            line=call_line,
-            reference_type=ref_type,
-            access_chain=standalone_on,
-            access_chain_symbol=access_chain_symbol,
-            on_kind=standalone_on_kind,
-            on_file=on_file,
-            on_line=on_line,
-        ) if target_fqn else None
+        member_ref = (
+            MemberRef(
+                target_name=callee or "",
+                target_fqn=target_fqn,
+                target_kind=target_kind,
+                file=call_file,
+                line=call_line,
+                reference_type=ref_type,
+                access_chain=standalone_on,
+                access_chain_symbol=access_chain_symbol,
+                on_kind=standalone_on_kind,
+                on_file=on_file,
+                on_line=on_line,
+            )
+            if target_fqn
+            else None
+        )
 
         entry = ContextEntry(
             depth=depth,
@@ -561,22 +607,28 @@ def build_value_consumer_chain(
         callee = _build_callee_display(consumer_target_name, consumer_target_kind)
 
         # Resolve on/on_kind for direct argument consumer calls (Q3 + implicit $this fallback)
-        direct_on, direct_on_kind, access_chain_symbol, on_file, on_line = _resolve_call_on(runner, consumer_call_id)
+        direct_on, direct_on_kind, access_chain_symbol, on_file, on_line = _resolve_call_on(
+            runner, consumer_call_id
+        )
 
         # Build member_ref for correct console rendering order (arrow before tag)
-        member_ref = MemberRef(
-            target_name=callee or "",
-            target_fqn=consumer_target_fqn,
-            target_kind=consumer_target_kind,
-            file=call_file,
-            line=call_line,
-            reference_type=ref_type,
-            access_chain=direct_on,
-            access_chain_symbol=access_chain_symbol,
-            on_kind=direct_on_kind,
-            on_file=on_file,
-            on_line=on_line,
-        ) if consumer_target_fqn else None
+        member_ref = (
+            MemberRef(
+                target_name=callee or "",
+                target_fqn=consumer_target_fqn,
+                target_kind=consumer_target_kind,
+                file=call_file,
+                line=call_line,
+                reference_type=ref_type,
+                access_chain=direct_on,
+                access_chain_symbol=access_chain_symbol,
+                on_kind=direct_on_kind,
+                on_file=on_file,
+                on_line=on_line,
+            )
+            if consumer_target_fqn
+            else None
+        )
 
         entry = ContextEntry(
             depth=depth,
@@ -596,11 +648,22 @@ def build_value_consumer_chain(
         )
 
         # Cross into callee for direct arguments too
-        if depth < max_depth and consumer_target_id and consumer_target_kind in ("Method", "Function"):
+        if (
+            depth < max_depth
+            and consumer_target_id
+            and consumer_target_kind in ("Method", "Function")
+        ):
             cross_into_callee(
-                runner, consumer_call_id, consumer_target_id,
-                entry, depth, max_depth, limit, visited,
-                crossing_count=crossing_count, max_crossings=max_crossings,
+                runner,
+                consumer_call_id,
+                consumer_target_id,
+                entry,
+                depth,
+                max_depth,
+                limit,
+                visited,
+                crossing_count=crossing_count,
+                max_crossings=max_crossings,
             )
 
         count += 1
@@ -663,13 +726,21 @@ def cross_into_callee(
         param_rec = runner.execute_single(Q5_RESOLVE_PARAM, param_fqn=parameter_fqn)
         if not param_rec:
             continue
-        param_value_id = param_rec.get("value_id") if isinstance(param_rec, dict) else param_rec["value_id"]
+        param_value_id = (
+            param_rec.get("value_id") if isinstance(param_rec, dict) else param_rec["value_id"]
+        )
         if not param_value_id or param_value_id in visited:
             continue
 
         child_entries = build_value_consumer_chain(
-            runner, param_value_id, depth + 1, max_depth, limit, visited,
-            crossing_count=crossing_count, max_crossings=max_crossings,
+            runner,
+            param_value_id,
+            depth + 1,
+            max_depth,
+            limit,
+            visited,
+            crossing_count=crossing_count,
+            max_crossings=max_crossings,
         )
         for ce in child_entries:
             if not ce.crossed_from:
@@ -680,19 +751,34 @@ def cross_into_callee(
     local_rec = runner.execute_single(Q6_LOCAL_FOR_RESULT, call_id=call_node_id)
     local_id = None
     if local_rec:
-        local_id = local_rec.get("local_id") if isinstance(local_rec, dict) else local_rec["local_id"]
+        local_id = (
+            local_rec.get("local_id") if isinstance(local_rec, dict) else local_rec["local_id"]
+        )
 
     if local_id and local_id not in visited:
         return_entries = build_value_consumer_chain(
-            runner, local_id, depth + 1, max_depth, limit, visited,
-            crossing_count=crossing_count, max_crossings=max_crossings,
+            runner,
+            local_id,
+            depth + 1,
+            max_depth,
+            limit,
+            visited,
+            crossing_count=crossing_count,
+            max_crossings=max_crossings,
         )
         entry.children.extend(return_entries)
     elif not local_id:
         # No local assignment -- check for return expression crossing
         cross_into_callers_via_return(
-            runner, call_node_id, entry, depth, max_depth, limit, visited,
-            crossing_count=crossing_count, max_crossings=max_crossings,
+            runner,
+            call_node_id,
+            entry,
+            depth,
+            max_depth,
+            limit,
+            visited,
+            crossing_count=crossing_count,
+            max_crossings=max_crossings,
         )
 
 
@@ -752,12 +838,16 @@ def cross_into_callers_via_return(
     if not local_rec:
         return
 
-    result_id = local_rec.get("result_id") if isinstance(local_rec, dict) else local_rec["result_id"]
+    result_id = (
+        local_rec.get("result_id") if isinstance(local_rec, dict) else local_rec["result_id"]
+    )
     if not result_id:
         return
 
     # Step 2: Verify no local assignment (inline return check)
-    check_local = local_rec.get("local_id") if isinstance(local_rec, dict) else local_rec["local_id"]
+    check_local = (
+        local_rec.get("local_id") if isinstance(local_rec, dict) else local_rec["local_id"]
+    )
     if check_local:
         return  # Has a local assignment, not an inline return
 
@@ -765,7 +855,9 @@ def cross_into_callers_via_return(
     type_rec = runner.execute_single(Q7_TYPE_OF, value_id=result_id)
     if not type_rec:
         return  # No type info, don't cross (conservative)
-    consumer_type_id = type_rec.get("type_id") if isinstance(type_rec, dict) else type_rec["type_id"]
+    consumer_type_id = (
+        type_rec.get("type_id") if isinstance(type_rec, dict) else type_rec["type_id"]
+    )
     if not consumer_type_id:
         return
 
@@ -773,7 +865,9 @@ def cross_into_callers_via_return(
     method_rec = runner.execute_single(Q12_CONTAINING_METHOD, node_id=call_node_id)
     if not method_rec:
         return
-    containing_method_id = method_rec.get("method_id") if isinstance(method_rec, dict) else method_rec["method_id"]
+    containing_method_id = (
+        method_rec.get("method_id") if isinstance(method_rec, dict) else method_rec["method_id"]
+    )
     if not containing_method_id:
         return
 
@@ -801,8 +895,14 @@ def cross_into_callers_via_return(
 
         # Continue tracing from caller's local (increment crossing_count)
         return_entries = build_value_consumer_chain(
-            runner, caller_local_id, depth + 1, max_depth, limit, visited,
-            crossing_count=crossing_count + 1, max_crossings=max_crossings,
+            runner,
+            caller_local_id,
+            depth + 1,
+            max_depth,
+            limit,
+            visited,
+            crossing_count=crossing_count + 1,
+            max_crossings=max_crossings,
         )
 
         # Set crossed_from to show caller method FQN
@@ -967,7 +1067,11 @@ def build_value_source_chain(
                         param_fqn=arg.value_ref_symbol,
                     )
                 if param_rec:
-                    arg_val_id = param_rec.get("value_id") if isinstance(param_rec, dict) else param_rec["value_id"]
+                    arg_val_id = (
+                        param_rec.get("value_id")
+                        if isinstance(param_rec, dict)
+                        else param_rec["value_id"]
+                    )
                     if arg_val_id and arg_val_id not in visited:
                         children = build_value_source_chain(
                             runner, arg_val_id, depth + 1, max_depth, limit, visited
@@ -984,7 +1088,11 @@ def build_value_source_chain(
                             fqn=on_fqn,
                         )
                         if on_rec:
-                            on_val_id = on_rec.get("value_id") if isinstance(on_rec, dict) else on_rec["value_id"]
+                            on_val_id = (
+                                on_rec.get("value_id")
+                                if isinstance(on_rec, dict)
+                                else on_rec["value_id"]
+                            )
                             if on_val_id and on_val_id not in visited:
                                 children = build_value_source_chain(
                                     runner, on_val_id, depth + 1, max_depth, limit, visited

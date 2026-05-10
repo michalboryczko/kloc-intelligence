@@ -14,21 +14,20 @@ Key design rules:
 
 from __future__ import annotations
 
-from typing import Callable
+from collections.abc import Callable
 
-from ..db.query_runner import QueryRunner
 from ..db.queries.context_property import (
     Q3_PARAM_CALLERS,
     fetch_property_used_by_data,
     fetch_property_uses_data,
 )
+from ..db.query_runner import QueryRunner
 from ..logic.graph_helpers import member_display_name
-from ..models.results import ContextEntry, MemberRef, ArgumentInfo
+from ..models.results import ArgumentInfo, ContextEntry, MemberRef
 from .value_context import (
     build_value_consumer_chain,
     build_value_source_chain,
 )
-
 
 # =============================================================================
 # Internal helpers
@@ -124,8 +123,14 @@ def build_property_uses(
         param_value_kind = param_rec.get("param_value_kind")
         if param_fqn and param_value_kind == "parameter":
             return build_property_callers_filtered(
-                runner, param_fqn, property_name, property_fqn,
-                depth, max_depth, limit, visited,
+                runner,
+                param_fqn,
+                property_name,
+                property_fqn,
+                depth,
+                max_depth,
+                limit,
+                visited,
             )
 
     # No promoted parameter found
@@ -188,14 +193,16 @@ def build_property_callers_filtered(
         filtered_args: list[ArgumentInfo] = []
         position = rec.get("position")
         if position is not None:
-            filtered_args.append(ArgumentInfo(
-                position=int(position),
-                value_expr=rec.get("expression"),
-                value_source=rec.get("value_kind"),
-                value_type=rec.get("value_type"),
-                value_ref_symbol=rec.get("value_fqn"),
-                param_fqn=param_fqn,
-            ))
+            filtered_args.append(
+                ArgumentInfo(
+                    position=int(position),
+                    value_expr=rec.get("expression"),
+                    value_source=rec.get("value_kind"),
+                    value_type=rec.get("value_type"),
+                    value_ref_symbol=rec.get("value_fqn"),
+                    param_fqn=param_fqn,
+                )
+            )
 
         entry = ContextEntry(
             depth=depth,
@@ -312,7 +319,9 @@ def build_property_used_by(
                 chain_recv_kind = rec.get("chain_recv_kind")
                 if recv_prop_name:
                     prop_display = recv_prop_name.lstrip("$")
-                    if chain_recv_kind == "self" or (chain_recv_kind is None and chain_recv_name is None):
+                    if chain_recv_kind == "self" or (
+                        chain_recv_kind is None and chain_recv_name is None
+                    ):
                         # Self access: $this->address
                         chain_display = f"$this->{prop_display}"
                     elif chain_recv_name:
@@ -411,12 +420,8 @@ def build_property_used_by(
                 if child_entry.arguments:
                     filtered_args = []
                     for arg in child_entry.arguments:
-                        if arg.value_expr and arg.value_expr.endswith(
-                            f"->{prop_name_bare}"
-                        ):
-                            filtered_args.append(arg)
-                        elif arg.value_expr and arg.value_expr.endswith(
-                            f"->{property_name}"
+                        if (arg.value_expr and arg.value_expr.endswith(f"->{prop_name_bare}")) or (
+                            arg.value_expr and arg.value_expr.endswith(f"->{property_name}")
                         ):
                             filtered_args.append(arg)
                     # Only apply filter if we found matches
@@ -426,16 +431,12 @@ def build_property_used_by(
             # Caller chain integration
             if caller_chain_fn:
                 if entry.children and depth + 1 < max_depth:
-                    caller_entries = caller_chain_fn(
-                        scope_id, depth + 2, max_depth
-                    )
+                    caller_entries = caller_chain_fn(scope_id, depth + 2, max_depth)
                     if caller_entries:
                         for child in entry.children:
                             child.children = caller_entries
                 elif not entry.children:
-                    caller_entries = caller_chain_fn(
-                        scope_id, depth + 1, max_depth
-                    )
+                    caller_entries = caller_chain_fn(scope_id, depth + 1, max_depth)
                     if caller_entries:
                         entry.children = caller_entries
 

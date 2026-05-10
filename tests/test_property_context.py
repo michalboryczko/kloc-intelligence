@@ -14,14 +14,6 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-from src.models.results import ContextEntry
-from src.orchestration.property_context import (
-    build_property_uses,
-    build_property_callers_filtered,
-    build_property_used_by,
-    _resolve_on_kind,
-    _build_on_display,
-)
 from src.db.queries.context_property import (
     Q1_PROPERTY_CALLS,
     Q2_PROMOTED_PARAMETER,
@@ -33,7 +25,14 @@ from src.db.queries.context_value import (
     Q9_SOURCE_CHAIN,
     Q11_CALL_ARGUMENTS,
 )
-
+from src.models.results import ContextEntry
+from src.orchestration.property_context import (
+    _build_on_display,
+    _resolve_on_kind,
+    build_property_callers_filtered,
+    build_property_used_by,
+    build_property_uses,
+)
 
 # =============================================================================
 # Fixtures / Factories
@@ -94,34 +93,27 @@ class TestBuildOnDisplay:
         assert _build_on_display([], "$email", "User::$email") is None
 
     def test_self_receiver(self):
-        result = _build_on_display(
-            [("$this", "self")], "$email", "User::$email"
-        )
+        result = _build_on_display([("$this", "self")], "$email", "User::$email")
         assert result == "$this->email (User::$email)"
 
     def test_param_receiver(self):
-        result = _build_on_display(
-            [("$user", "param")], "$email", "User::$email"
-        )
+        result = _build_on_display([("$user", "param")], "$email", "User::$email")
         assert result == "$user"
 
     def test_multiple_receivers(self):
         result = _build_on_display(
             [("$user", "param"), ("$admin", "local")],
-            "$email", "User::$email",
+            "$email",
+            "User::$email",
         )
         assert result == "$user, $admin"
 
     def test_self_with_dollar_prefix(self):
-        result = _build_on_display(
-            [("$this", "self")], "email", "User::$email"
-        )
+        result = _build_on_display([("$this", "self")], "email", "User::$email")
         assert result == "$this->email (User::$email)"
 
     def test_property_fqn_in_self_display(self):
-        result = _build_on_display(
-            [("$this", "self")], "$name", "Order::$name"
-        )
+        result = _build_on_display([("$this", "self")], "$name", "Order::$name")
         assert "Order::$name" in result
 
 
@@ -179,17 +171,13 @@ class TestPropertyUses:
     def test_no_promoted_parameter(self):
         """Property with no assigned_from returns empty."""
         runner = make_runner(execute_map={Q2_PROMOTED_PARAMETER: []})
-        entries = build_property_uses(
-            runner, "prop:x", "$x", "A::$x", 1, 1, 100
-        )
+        entries = build_property_uses(runner, "prop:x", "$x", "A::$x", 1, 1, 100)
         assert entries == []
 
     def test_depth_exceeded_returns_empty(self):
         """depth > max_depth returns empty."""
         runner = make_runner()
-        entries = build_property_uses(
-            runner, "prop:x", "$x", "A::$x", 5, 3, 100
-        )
+        entries = build_property_uses(runner, "prop:x", "$x", "A::$x", 5, 3, 100)
         assert entries == []
 
 
@@ -227,8 +215,12 @@ class TestPropertyCallersFiltered:
         entries = build_property_callers_filtered(
             runner,
             "Svc::__construct::$repo",
-            "$repo", "Svc::$repo",
-            1, 1, 100, set(),
+            "$repo",
+            "Svc::$repo",
+            1,
+            1,
+            100,
+            set(),
         )
         assert len(entries) == 1
         assert entries[0].fqn == "Boot::run"
@@ -241,27 +233,41 @@ class TestPropertyCallersFiltered:
             execute_map={
                 Q3_PARAM_CALLERS: [
                     {
-                        "call_id": "c:2", "call_file": "src/B.php", "call_line": 5,
-                        "value_id": "v:2", "value_kind": "local",
-                        "value_name": "$b", "value_fqn": None,
-                        "scope_id": "m:b", "scope_fqn": "B::init",
-                        "scope_kind": "Method", "scope_signature": None,
-                        "position": 0, "expression": "$b", "value_type": None,
+                        "call_id": "c:2",
+                        "call_file": "src/B.php",
+                        "call_line": 5,
+                        "value_id": "v:2",
+                        "value_kind": "local",
+                        "value_name": "$b",
+                        "value_fqn": None,
+                        "scope_id": "m:b",
+                        "scope_fqn": "B::init",
+                        "scope_kind": "Method",
+                        "scope_signature": None,
+                        "position": 0,
+                        "expression": "$b",
+                        "value_type": None,
                     },
                     {
-                        "call_id": "c:1", "call_file": "src/A.php", "call_line": 10,
-                        "value_id": "v:1", "value_kind": "local",
-                        "value_name": "$a", "value_fqn": None,
-                        "scope_id": "m:a", "scope_fqn": "A::init",
-                        "scope_kind": "Method", "scope_signature": None,
-                        "position": 0, "expression": "$a", "value_type": None,
+                        "call_id": "c:1",
+                        "call_file": "src/A.php",
+                        "call_line": 10,
+                        "value_id": "v:1",
+                        "value_kind": "local",
+                        "value_name": "$a",
+                        "value_fqn": None,
+                        "scope_id": "m:a",
+                        "scope_fqn": "A::init",
+                        "scope_kind": "Method",
+                        "scope_signature": None,
+                        "position": 0,
+                        "expression": "$a",
+                        "value_type": None,
                     },
                 ],
             },
         )
-        entries = build_property_callers_filtered(
-            runner, "X::$p", "$p", "X::$p", 1, 1, 100, set()
-        )
+        entries = build_property_callers_filtered(runner, "X::$p", "$p", "X::$p", 1, 1, 100, set())
         assert len(entries) == 2
         assert entries[0].file == "src/A.php"
         assert entries[1].file == "src/B.php"
@@ -271,45 +277,62 @@ class TestPropertyCallersFiltered:
             execute_map={
                 Q3_PARAM_CALLERS: [
                     {
-                        "call_id": f"c:{i}", "call_file": f"f{i}.php", "call_line": i,
-                        "value_id": f"v:{i}", "value_kind": "local",
-                        "value_name": f"$x{i}", "value_fqn": None,
-                        "scope_id": f"m:{i}", "scope_fqn": f"M{i}::run",
-                        "scope_kind": "Method", "scope_signature": None,
-                        "position": 0, "expression": f"$x{i}", "value_type": None,
+                        "call_id": f"c:{i}",
+                        "call_file": f"f{i}.php",
+                        "call_line": i,
+                        "value_id": f"v:{i}",
+                        "value_kind": "local",
+                        "value_name": f"$x{i}",
+                        "value_fqn": None,
+                        "scope_id": f"m:{i}",
+                        "scope_fqn": f"M{i}::run",
+                        "scope_kind": "Method",
+                        "scope_signature": None,
+                        "position": 0,
+                        "expression": f"$x{i}",
+                        "value_type": None,
                     }
                     for i in range(5)
                 ],
             },
         )
-        entries = build_property_callers_filtered(
-            runner, "X::$p", "$p", "X::$p", 1, 1, 2, set()
-        )
+        entries = build_property_callers_filtered(runner, "X::$p", "$p", "X::$p", 1, 1, 2, set())
         assert len(entries) == 2
 
     def test_depth_expansion_traces_source(self):
         """At depth < max_depth, traces caller's argument Value source."""
+
         def mock_execute(query, **kwargs):
             q = query.strip()
             if Q3_PARAM_CALLERS.strip() in q:
                 return [
                     {
-                        "call_id": "c:1", "call_file": "f.php", "call_line": 5,
+                        "call_id": "c:1",
+                        "call_file": "f.php",
+                        "call_line": 5,
                         "value_id": "val:caller_arg",
                         "value_kind": "local",
-                        "value_name": "$data", "value_fqn": "A::$data",
-                        "scope_id": "m:run", "scope_fqn": "A::run",
-                        "scope_kind": "Method", "scope_signature": None,
-                        "position": 0, "expression": "$data", "value_type": None,
+                        "value_name": "$data",
+                        "value_fqn": "A::$data",
+                        "scope_id": "m:run",
+                        "scope_fqn": "A::run",
+                        "scope_kind": "Method",
+                        "scope_signature": None,
+                        "position": 0,
+                        "expression": "$data",
+                        "value_type": None,
                     },
                 ]
             if Q9_SOURCE_CHAIN.strip() in q:
                 return [
                     {
-                        "value_kind": "local", "value_fqn": "A::$data",
-                        "source_id": "s:1", "source_kind": "result",
+                        "value_kind": "local",
+                        "value_fqn": "A::$data",
+                        "source_id": "s:1",
+                        "source_kind": "result",
                         "call_id": "call:create",
-                        "call_file": "f.php", "call_line": 3,
+                        "call_file": "f.php",
+                        "call_line": 3,
                         "call_kind": "constructor",
                         "callee_id": "cls:Repo",
                         "callee_fqn": "App\\Repo",
@@ -317,7 +340,8 @@ class TestPropertyCallersFiltered:
                         "callee_kind": "Class",
                         "callee_signature": None,
                         "recv_value_kind": None,
-                        "recv_name": None, "recv_prop_fqn": None,
+                        "recv_name": None,
+                        "recv_prop_fqn": None,
                     },
                 ]
             if Q11_CALL_ARGUMENTS.strip() in q:
@@ -328,9 +352,7 @@ class TestPropertyCallersFiltered:
         runner.execute.side_effect = mock_execute
         runner.execute_single.return_value = None
 
-        entries = build_property_callers_filtered(
-            runner, "X::$p", "$p", "X::$p", 1, 3, 100, set()
-        )
+        entries = build_property_callers_filtered(runner, "X::$p", "$p", "X::$p", 1, 3, 100, set())
         assert len(entries) == 1
         assert len(entries[0].children) == 1
         assert entries[0].children[0].fqn == "App\\Repo"
@@ -366,9 +388,7 @@ class TestPropertyUsedByMethodGrouping:
                 ],
             },
         )
-        entries = build_property_used_by(
-            runner, "prop:email", "$email", "User::$email", 1, 1, 100
-        )
+        entries = build_property_used_by(runner, "prop:email", "$email", "User::$email", 1, 1, 100)
         assert len(entries) == 1
         assert entries[0].fqn == "Svc::handle"
         assert entries[0].ref_type == "property_access"
@@ -379,29 +399,39 @@ class TestPropertyUsedByMethodGrouping:
             execute_map={
                 Q1_PROPERTY_CALLS: [
                     {
-                        "call_id": "call:1", "call_file": "f.php", "call_line": 10,
+                        "call_id": "call:1",
+                        "call_file": "f.php",
+                        "call_line": 10,
                         "call_kind": "property_access",
-                        "scope_id": "m:handle", "scope_fqn": "Svc::handle",
-                        "scope_kind": "Method", "scope_signature": None,
-                        "recv_id": "r:1", "recv_value_kind": "self",
-                        "recv_name": "$this", "recv_prop_fqn": None,
+                        "scope_id": "m:handle",
+                        "scope_fqn": "Svc::handle",
+                        "scope_kind": "Method",
+                        "scope_signature": None,
+                        "recv_id": "r:1",
+                        "recv_value_kind": "self",
+                        "recv_name": "$this",
+                        "recv_prop_fqn": None,
                         "result_id": None,
                     },
                     {
-                        "call_id": "call:2", "call_file": "f.php", "call_line": 15,
+                        "call_id": "call:2",
+                        "call_file": "f.php",
+                        "call_line": 15,
                         "call_kind": "property_access",
-                        "scope_id": "m:handle", "scope_fqn": "Svc::handle",
-                        "scope_kind": "Method", "scope_signature": None,
-                        "recv_id": "r:2", "recv_value_kind": "self",
-                        "recv_name": "$this", "recv_prop_fqn": None,
+                        "scope_id": "m:handle",
+                        "scope_fqn": "Svc::handle",
+                        "scope_kind": "Method",
+                        "scope_signature": None,
+                        "recv_id": "r:2",
+                        "recv_value_kind": "self",
+                        "recv_name": "$this",
+                        "recv_prop_fqn": None,
                         "result_id": None,
                     },
                 ],
             },
         )
-        entries = build_property_used_by(
-            runner, "prop:email", "$email", "User::$email", 1, 1, 100
-        )
+        entries = build_property_used_by(runner, "prop:email", "$email", "User::$email", 1, 1, 100)
         assert len(entries) == 1
         assert entries[0].sites is not None
         assert len(entries[0].sites) == 2
@@ -413,29 +443,39 @@ class TestPropertyUsedByMethodGrouping:
             execute_map={
                 Q1_PROPERTY_CALLS: [
                     {
-                        "call_id": "call:1", "call_file": "f.php", "call_line": 10,
+                        "call_id": "call:1",
+                        "call_file": "f.php",
+                        "call_line": 10,
                         "call_kind": "property_access",
-                        "scope_id": "m:a", "scope_fqn": "A::run",
-                        "scope_kind": "Method", "scope_signature": None,
-                        "recv_id": "r:1", "recv_value_kind": "parameter",
-                        "recv_name": "$user", "recv_prop_fqn": None,
+                        "scope_id": "m:a",
+                        "scope_fqn": "A::run",
+                        "scope_kind": "Method",
+                        "scope_signature": None,
+                        "recv_id": "r:1",
+                        "recv_value_kind": "parameter",
+                        "recv_name": "$user",
+                        "recv_prop_fqn": None,
                         "result_id": None,
                     },
                     {
-                        "call_id": "call:2", "call_file": "f.php", "call_line": 20,
+                        "call_id": "call:2",
+                        "call_file": "f.php",
+                        "call_line": 20,
                         "call_kind": "property_access",
-                        "scope_id": "m:b", "scope_fqn": "B::process",
-                        "scope_kind": "Method", "scope_signature": None,
-                        "recv_id": "r:2", "recv_value_kind": "local",
-                        "recv_name": "$u", "recv_prop_fqn": None,
+                        "scope_id": "m:b",
+                        "scope_fqn": "B::process",
+                        "scope_kind": "Method",
+                        "scope_signature": None,
+                        "recv_id": "r:2",
+                        "recv_value_kind": "local",
+                        "recv_name": "$u",
+                        "recv_prop_fqn": None,
                         "result_id": None,
                     },
                 ],
             },
         )
-        entries = build_property_used_by(
-            runner, "prop:email", "$email", "User::$email", 1, 1, 100
-        )
+        entries = build_property_used_by(runner, "prop:email", "$email", "User::$email", 1, 1, 100)
         assert len(entries) == 2
 
 
@@ -452,20 +492,24 @@ class TestPropertyUsedByReceivers:
             execute_map={
                 Q1_PROPERTY_CALLS: [
                     {
-                        "call_id": "call:1", "call_file": "f.php", "call_line": 5,
+                        "call_id": "call:1",
+                        "call_file": "f.php",
+                        "call_line": 5,
                         "call_kind": "property_access",
-                        "scope_id": "m:x", "scope_fqn": "X::do",
-                        "scope_kind": "Method", "scope_signature": None,
-                        "recv_id": "r:1", "recv_value_kind": "self",
-                        "recv_name": "$this", "recv_prop_fqn": None,
+                        "scope_id": "m:x",
+                        "scope_fqn": "X::do",
+                        "scope_kind": "Method",
+                        "scope_signature": None,
+                        "recv_id": "r:1",
+                        "recv_value_kind": "self",
+                        "recv_name": "$this",
+                        "recv_prop_fqn": None,
                         "result_id": None,
                     },
                 ],
             },
         )
-        entries = build_property_used_by(
-            runner, "prop:name", "$name", "X::$name", 1, 1, 100
-        )
+        entries = build_property_used_by(runner, "prop:name", "$name", "X::$name", 1, 1, 100)
         assert len(entries) == 1
         assert entries[0].on_kind == "property"  # self -> property
         assert "$this->name" in entries[0].on
@@ -475,20 +519,24 @@ class TestPropertyUsedByReceivers:
             execute_map={
                 Q1_PROPERTY_CALLS: [
                     {
-                        "call_id": "call:1", "call_file": "f.php", "call_line": 5,
+                        "call_id": "call:1",
+                        "call_file": "f.php",
+                        "call_line": 5,
                         "call_kind": "property_access",
-                        "scope_id": "m:x", "scope_fqn": "X::do",
-                        "scope_kind": "Method", "scope_signature": None,
-                        "recv_id": "r:1", "recv_value_kind": "parameter",
-                        "recv_name": "$order", "recv_prop_fqn": None,
+                        "scope_id": "m:x",
+                        "scope_fqn": "X::do",
+                        "scope_kind": "Method",
+                        "scope_signature": None,
+                        "recv_id": "r:1",
+                        "recv_value_kind": "parameter",
+                        "recv_name": "$order",
+                        "recv_prop_fqn": None,
                         "result_id": None,
                     },
                 ],
             },
         )
-        entries = build_property_used_by(
-            runner, "prop:id", "$id", "Order::$id", 1, 1, 100
-        )
+        entries = build_property_used_by(runner, "prop:id", "$id", "Order::$id", 1, 1, 100)
         assert entries[0].on == "$order"
         assert entries[0].on_kind == "param"
 
@@ -498,29 +546,39 @@ class TestPropertyUsedByReceivers:
             execute_map={
                 Q1_PROPERTY_CALLS: [
                     {
-                        "call_id": "call:1", "call_file": "f.php", "call_line": 5,
+                        "call_id": "call:1",
+                        "call_file": "f.php",
+                        "call_line": 5,
                         "call_kind": "property_access",
-                        "scope_id": "m:x", "scope_fqn": "X::do",
-                        "scope_kind": "Method", "scope_signature": None,
-                        "recv_id": "r:1", "recv_value_kind": "parameter",
-                        "recv_name": "$order", "recv_prop_fqn": None,
+                        "scope_id": "m:x",
+                        "scope_fqn": "X::do",
+                        "scope_kind": "Method",
+                        "scope_signature": None,
+                        "recv_id": "r:1",
+                        "recv_value_kind": "parameter",
+                        "recv_name": "$order",
+                        "recv_prop_fqn": None,
                         "result_id": None,
                     },
                     {
-                        "call_id": "call:2", "call_file": "f.php", "call_line": 8,
+                        "call_id": "call:2",
+                        "call_file": "f.php",
+                        "call_line": 8,
                         "call_kind": "property_access",
-                        "scope_id": "m:x", "scope_fqn": "X::do",
-                        "scope_kind": "Method", "scope_signature": None,
-                        "recv_id": "r:2", "recv_value_kind": "parameter",
-                        "recv_name": "$order", "recv_prop_fqn": None,
+                        "scope_id": "m:x",
+                        "scope_fqn": "X::do",
+                        "scope_kind": "Method",
+                        "scope_signature": None,
+                        "recv_id": "r:2",
+                        "recv_value_kind": "parameter",
+                        "recv_name": "$order",
+                        "recv_prop_fqn": None,
                         "result_id": None,
                     },
                 ],
             },
         )
-        entries = build_property_used_by(
-            runner, "prop:id", "$id", "Order::$id", 1, 1, 100
-        )
+        entries = build_property_used_by(runner, "prop:id", "$id", "Order::$id", 1, 1, 100)
         assert entries[0].on == "$order"  # Just one receiver
 
 
@@ -534,17 +592,24 @@ class TestPropertyUsedByDepth2:
 
     def test_depth_expansion_traces_result_values(self):
         """At depth < max_depth, traces result Values via consumer chain."""
+
         def mock_execute(query, **kwargs):
             q = query.strip()
             if Q1_PROPERTY_CALLS.strip() in q:
                 return [
                     {
-                        "call_id": "call:1", "call_file": "f.php", "call_line": 5,
+                        "call_id": "call:1",
+                        "call_file": "f.php",
+                        "call_line": 5,
                         "call_kind": "property_access",
-                        "scope_id": "m:do", "scope_fqn": "S::do",
-                        "scope_kind": "Method", "scope_signature": None,
-                        "recv_id": "r:1", "recv_value_kind": "parameter",
-                        "recv_name": "$obj", "recv_prop_fqn": None,
+                        "scope_id": "m:do",
+                        "scope_fqn": "S::do",
+                        "scope_kind": "Method",
+                        "scope_signature": None,
+                        "recv_id": "r:1",
+                        "recv_value_kind": "parameter",
+                        "recv_name": "$obj",
+                        "recv_prop_fqn": None,
                         "result_id": "result:1",
                     },
                 ]
@@ -572,34 +637,45 @@ class TestPropertyUsedByDepth2:
         runner.execute.side_effect = mock_execute
         runner.execute_single.return_value = None
 
-        entries = build_property_used_by(
-            runner, "prop:email", "$email", "User::$email", 1, 3, 100
-        )
+        entries = build_property_used_by(runner, "prop:email", "$email", "User::$email", 1, 3, 100)
         assert len(entries) == 1
         assert len(entries[0].children) >= 1
 
     def test_children_deduplication(self):
         """Children with same (fqn, file, line) should be deduplicated."""
+
         def mock_execute(query, **kwargs):
             q = query.strip()
             if Q1_PROPERTY_CALLS.strip() in q:
                 return [
                     {
-                        "call_id": "call:1", "call_file": "f.php", "call_line": 5,
+                        "call_id": "call:1",
+                        "call_file": "f.php",
+                        "call_line": 5,
                         "call_kind": None,
-                        "scope_id": "m:do", "scope_fqn": "S::do",
-                        "scope_kind": "Method", "scope_signature": None,
-                        "recv_id": None, "recv_value_kind": None,
-                        "recv_name": None, "recv_prop_fqn": None,
+                        "scope_id": "m:do",
+                        "scope_fqn": "S::do",
+                        "scope_kind": "Method",
+                        "scope_signature": None,
+                        "recv_id": None,
+                        "recv_value_kind": None,
+                        "recv_name": None,
+                        "recv_prop_fqn": None,
                         "result_id": "result:1",
                     },
                     {
-                        "call_id": "call:2", "call_file": "f.php", "call_line": 8,
+                        "call_id": "call:2",
+                        "call_file": "f.php",
+                        "call_line": 8,
                         "call_kind": None,
-                        "scope_id": "m:do", "scope_fqn": "S::do",
-                        "scope_kind": "Method", "scope_signature": None,
-                        "recv_id": None, "recv_value_kind": None,
-                        "recv_name": None, "recv_prop_fqn": None,
+                        "scope_id": "m:do",
+                        "scope_fqn": "S::do",
+                        "scope_kind": "Method",
+                        "scope_signature": None,
+                        "recv_id": None,
+                        "recv_value_kind": None,
+                        "recv_name": None,
+                        "recv_prop_fqn": None,
                         "result_id": "result:2",
                     },
                 ]
@@ -628,9 +704,7 @@ class TestPropertyUsedByDepth2:
         runner.execute.side_effect = mock_execute
         runner.execute_single.return_value = None
 
-        entries = build_property_used_by(
-            runner, "prop:x", "$x", "A::$x", 1, 3, 100
-        )
+        entries = build_property_used_by(runner, "prop:x", "$x", "A::$x", 1, 3, 100)
         assert len(entries) == 1
         # Should be deduplicated to 1 child (same fqn, file, line)
         assert len(entries[0].children) == 1
@@ -646,17 +720,24 @@ class TestPropertyUsedByArgFiltering:
 
     def test_filters_args_matching_property_name(self):
         """Only arguments whose value_expr ends with ->propertyName are kept."""
+
         def mock_execute(query, **kwargs):
             q = query.strip()
             if Q1_PROPERTY_CALLS.strip() in q:
                 return [
                     {
-                        "call_id": "call:1", "call_file": "f.php", "call_line": 5,
+                        "call_id": "call:1",
+                        "call_file": "f.php",
+                        "call_line": 5,
                         "call_kind": None,
-                        "scope_id": "m:do", "scope_fqn": "S::do",
-                        "scope_kind": "Method", "scope_signature": None,
-                        "recv_id": None, "recv_value_kind": None,
-                        "recv_name": None, "recv_prop_fqn": None,
+                        "scope_id": "m:do",
+                        "scope_fqn": "S::do",
+                        "scope_kind": "Method",
+                        "scope_signature": None,
+                        "recv_id": None,
+                        "recv_value_kind": None,
+                        "recv_name": None,
+                        "recv_prop_fqn": None,
                         "result_id": "result:1",
                     },
                 ]
@@ -678,14 +759,26 @@ class TestPropertyUsedByArgFiltering:
                 ]
             if Q11_CALL_ARGUMENTS.strip() in q:
                 return [
-                    {"position": 0, "expression": "$order->id",
-                     "value_kind": "result", "value_type": None,
-                     "parameter": None, "value_fqn": None,
-                     "value_id": "v1", "value_name": None},
-                    {"position": 1, "expression": "$order->name",
-                     "value_kind": "result", "value_type": None,
-                     "parameter": None, "value_fqn": None,
-                     "value_id": "v2", "value_name": None},
+                    {
+                        "position": 0,
+                        "expression": "$order->id",
+                        "value_kind": "result",
+                        "value_type": None,
+                        "parameter": None,
+                        "value_fqn": None,
+                        "value_id": "v1",
+                        "value_name": None,
+                    },
+                    {
+                        "position": 1,
+                        "expression": "$order->name",
+                        "value_kind": "result",
+                        "value_type": None,
+                        "parameter": None,
+                        "value_fqn": None,
+                        "value_id": "v2",
+                        "value_name": None,
+                    },
                 ]
             return []
 
@@ -693,9 +786,7 @@ class TestPropertyUsedByArgFiltering:
         runner.execute.side_effect = mock_execute
         runner.execute_single.return_value = None
 
-        entries = build_property_used_by(
-            runner, "prop:id", "$id", "Order::$id", 1, 3, 100
-        )
+        entries = build_property_used_by(runner, "prop:id", "$id", "Order::$id", 1, 3, 100)
         assert len(entries) == 1
         # Children should have filtered args to only "$order->id"
         if entries[0].children:
@@ -714,28 +805,38 @@ class TestPropertyUsedByCallerChain:
 
     def test_caller_chain_fn_called_when_no_children(self):
         """When no depth-2 children, caller_chain_fn adds callers at depth+1."""
-        caller_entries = [
-            ContextEntry(depth=2, node_id="cm:1", fqn="Caller::exec", kind="Method")
-        ]
+        caller_entries = [ContextEntry(depth=2, node_id="cm:1", fqn="Caller::exec", kind="Method")]
         callback = MagicMock(return_value=caller_entries)
 
         runner = make_runner(
             execute_map={
                 Q1_PROPERTY_CALLS: [
                     {
-                        "call_id": "call:1", "call_file": "f.php", "call_line": 5,
+                        "call_id": "call:1",
+                        "call_file": "f.php",
+                        "call_line": 5,
                         "call_kind": None,
-                        "scope_id": "m:do", "scope_fqn": "S::do",
-                        "scope_kind": "Method", "scope_signature": None,
-                        "recv_id": None, "recv_value_kind": None,
-                        "recv_name": None, "recv_prop_fqn": None,
+                        "scope_id": "m:do",
+                        "scope_fqn": "S::do",
+                        "scope_kind": "Method",
+                        "scope_signature": None,
+                        "recv_id": None,
+                        "recv_value_kind": None,
+                        "recv_name": None,
+                        "recv_prop_fqn": None,
                         "result_id": None,  # No result -> no depth-2 children
                     },
                 ],
             },
         )
         entries = build_property_used_by(
-            runner, "prop:x", "$x", "A::$x", 1, 3, 100,
+            runner,
+            "prop:x",
+            "$x",
+            "A::$x",
+            1,
+            3,
+            100,
             caller_chain_fn=callback,
         )
         assert len(entries) == 1
@@ -745,9 +846,7 @@ class TestPropertyUsedByCallerChain:
 
     def test_caller_chain_fn_appended_to_existing_children(self):
         """When depth-2 children exist, callers go as depth-3 on children."""
-        caller_entries = [
-            ContextEntry(depth=3, node_id="cm:1", fqn="Caller::exec", kind="Method")
-        ]
+        caller_entries = [ContextEntry(depth=3, node_id="cm:1", fqn="Caller::exec", kind="Method")]
         callback = MagicMock(return_value=caller_entries)
 
         def mock_execute(query, **kwargs):
@@ -755,12 +854,18 @@ class TestPropertyUsedByCallerChain:
             if Q1_PROPERTY_CALLS.strip() in q:
                 return [
                     {
-                        "call_id": "call:1", "call_file": "f.php", "call_line": 5,
+                        "call_id": "call:1",
+                        "call_file": "f.php",
+                        "call_line": 5,
                         "call_kind": None,
-                        "scope_id": "m:do", "scope_fqn": "S::do",
-                        "scope_kind": "Method", "scope_signature": None,
-                        "recv_id": None, "recv_value_kind": None,
-                        "recv_name": None, "recv_prop_fqn": None,
+                        "scope_id": "m:do",
+                        "scope_fqn": "S::do",
+                        "scope_kind": "Method",
+                        "scope_signature": None,
+                        "recv_id": None,
+                        "recv_value_kind": None,
+                        "recv_name": None,
+                        "recv_prop_fqn": None,
                         "result_id": "result:1",
                     },
                 ]
@@ -789,7 +894,13 @@ class TestPropertyUsedByCallerChain:
         runner.execute_single.return_value = None
 
         entries = build_property_used_by(
-            runner, "prop:x", "$x", "A::$x", 1, 3, 100,
+            runner,
+            "prop:x",
+            "$x",
+            "A::$x",
+            1,
+            3,
+            100,
             caller_chain_fn=callback,
         )
         assert len(entries) == 1
@@ -811,21 +922,25 @@ class TestPropertyUsedByLimitSort:
             execute_map={
                 Q1_PROPERTY_CALLS: [
                     {
-                        "call_id": f"c:{i}", "call_file": f"f{i}.php", "call_line": i,
+                        "call_id": f"c:{i}",
+                        "call_file": f"f{i}.php",
+                        "call_line": i,
                         "call_kind": None,
-                        "scope_id": f"m:{i}", "scope_fqn": f"M{i}::run",
-                        "scope_kind": "Method", "scope_signature": None,
-                        "recv_id": None, "recv_value_kind": None,
-                        "recv_name": None, "recv_prop_fqn": None,
+                        "scope_id": f"m:{i}",
+                        "scope_fqn": f"M{i}::run",
+                        "scope_kind": "Method",
+                        "scope_signature": None,
+                        "recv_id": None,
+                        "recv_value_kind": None,
+                        "recv_name": None,
+                        "recv_prop_fqn": None,
                         "result_id": None,
                     }
                     for i in range(10)
                 ],
             },
         )
-        entries = build_property_used_by(
-            runner, "prop:x", "$x", "A::$x", 1, 1, 3
-        )
+        entries = build_property_used_by(runner, "prop:x", "$x", "A::$x", 1, 1, 3)
         assert len(entries) == 3
 
     def test_sorted_by_file_then_line(self):
@@ -833,37 +948,45 @@ class TestPropertyUsedByLimitSort:
             execute_map={
                 Q1_PROPERTY_CALLS: [
                     {
-                        "call_id": "c:2", "call_file": "src/B.php", "call_line": 5,
+                        "call_id": "c:2",
+                        "call_file": "src/B.php",
+                        "call_line": 5,
                         "call_kind": None,
-                        "scope_id": "m:b", "scope_fqn": "B::run",
-                        "scope_kind": "Method", "scope_signature": None,
-                        "recv_id": None, "recv_value_kind": None,
-                        "recv_name": None, "recv_prop_fqn": None,
+                        "scope_id": "m:b",
+                        "scope_fqn": "B::run",
+                        "scope_kind": "Method",
+                        "scope_signature": None,
+                        "recv_id": None,
+                        "recv_value_kind": None,
+                        "recv_name": None,
+                        "recv_prop_fqn": None,
                         "result_id": None,
                     },
                     {
-                        "call_id": "c:1", "call_file": "src/A.php", "call_line": 10,
+                        "call_id": "c:1",
+                        "call_file": "src/A.php",
+                        "call_line": 10,
                         "call_kind": None,
-                        "scope_id": "m:a", "scope_fqn": "A::run",
-                        "scope_kind": "Method", "scope_signature": None,
-                        "recv_id": None, "recv_value_kind": None,
-                        "recv_name": None, "recv_prop_fqn": None,
+                        "scope_id": "m:a",
+                        "scope_fqn": "A::run",
+                        "scope_kind": "Method",
+                        "scope_signature": None,
+                        "recv_id": None,
+                        "recv_value_kind": None,
+                        "recv_name": None,
+                        "recv_prop_fqn": None,
                         "result_id": None,
                     },
                 ],
             },
         )
-        entries = build_property_used_by(
-            runner, "prop:x", "$x", "A::$x", 1, 1, 100
-        )
+        entries = build_property_used_by(runner, "prop:x", "$x", "A::$x", 1, 1, 100)
         assert entries[0].file == "src/A.php"
         assert entries[1].file == "src/B.php"
 
     def test_depth_exceeded_returns_empty(self):
         runner = make_runner()
-        entries = build_property_used_by(
-            runner, "prop:x", "$x", "A::$x", 5, 3, 100
-        )
+        entries = build_property_used_by(runner, "prop:x", "$x", "A::$x", 5, 3, 100)
         assert entries == []
 
     def test_no_scope_skips_call(self):
@@ -872,18 +995,22 @@ class TestPropertyUsedByLimitSort:
             execute_map={
                 Q1_PROPERTY_CALLS: [
                     {
-                        "call_id": "c:1", "call_file": "f.php", "call_line": 5,
+                        "call_id": "c:1",
+                        "call_file": "f.php",
+                        "call_line": 5,
                         "call_kind": None,
-                        "scope_id": None, "scope_fqn": None,
-                        "scope_kind": None, "scope_signature": None,
-                        "recv_id": None, "recv_value_kind": None,
-                        "recv_name": None, "recv_prop_fqn": None,
+                        "scope_id": None,
+                        "scope_fqn": None,
+                        "scope_kind": None,
+                        "scope_signature": None,
+                        "recv_id": None,
+                        "recv_value_kind": None,
+                        "recv_name": None,
+                        "recv_prop_fqn": None,
                         "result_id": None,
                     },
                 ],
             },
         )
-        entries = build_property_used_by(
-            runner, "prop:x", "$x", "A::$x", 1, 1, 100
-        )
+        entries = build_property_used_by(runner, "prop:x", "$x", "A::$x", 1, 1, 100)
         assert entries == []

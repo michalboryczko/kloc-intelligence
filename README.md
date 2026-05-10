@@ -1,441 +1,290 @@
 # kloc-intelligence
 
-Graph-native code intelligence platform backed by Neo4j. Provides structural code analysis for PHP codebases with bidirectional dependency traversal, inheritance trees, override chains, and rich context queries -- all powered by a persistent graph database.
+Graph-native code intelligence platform for PHP codebases. Loads a `sot.json`
+(Source of Truth) and optional Symfony flow metadata into Neo4j, optionally
+enriches the graph with LLM explanations and Qdrant vector embeddings, and
+exposes everything through a CLI plus an MCP server for AI agents.
 
-## Overview
+```
+PHP source ─► kloc-indexer-php ─► index.json
+                                                   │
+              kloc-mapper      ─► sot.json         │
+              kloc-symfony     ─► symfony-kloc.json│
+                                                   ▼
+                                       kloc-intelligence
+                                          ├── Neo4j (graph)
+                                          └── Qdrant (vectors)
+                                                   │
+                                                   ▼
+                              CLI / MCP server / Cypher / Qdrant API
+```
 
-kloc-intelligence imports a `sot.json` (Source of Truth) file produced by the kloc pipeline into Neo4j, then exposes 8 query commands via CLI, JSON output, and an MCP server for AI agent integration.
+Compared to `kloc-cli` (stateless, reads `sot.json` each invocation),
+kloc-intelligence is **stateful**: it persists the graph in Neo4j, supports
+multi-hop Cypher traversals, and adds AI features (per-node explanations,
+flow-level business summaries, semantic search) backed by Qdrant.
 
-The graph model stores PHP code symbols (classes, interfaces, methods, properties, values, etc.) as nodes with typed relationships (USES, CONTAINS, EXTENDS, IMPLEMENTS, OVERRIDES, and more). Queries are expressed as Cypher traversals, enabling sub-millisecond lookups on indexed fields and efficient multi-hop BFS expansions.
+## Features
 
-### Key Features
+- **16 commands** spanning schema management, structural traversal, source
+  reading, AI enrichment, and semantic search.
+- **Neo4j graph model** — 13 node kinds, 13 edge types, plus `:Flow` nodes
+  with `FLOW_ENTRY` / `FLOW_TRIGGERS` edges for Symfony app flows.
+- **Per-operation provider config** — point LLM and embeddings at any
+  OpenAI-compatible endpoint independently (OpenRouter, Google Gemini,
+  OpenAI, mixed).
+- **MCP server** — JSON-RPC 2.0 stdio protocol, 16 tools, multi-project
+  support.
+- **Contract-compliant output** — JSON matches the kloc-contracts schemas
+  used by every other tool in the pipeline.
 
-- **8 query commands**: resolve, usages, deps, context, owners, inherit, overrides, import
-- **Neo4j-backed**: persistent graph with indexes, constraints, and batch import
-- **MCP server**: JSON-RPC 2.0 stdio protocol for AI agent integration (Claude, etc.)
-- **Multi-project support**: single server can query multiple Neo4j databases
-- **Contract-compliant output**: JSON output matches kloc-contracts schemas exactly
-- **Rich console output**: colored tables and trees via Rich library
-
-## Installation
-
-### Prerequisites
-
-- Python 3.11+
-- [uv](https://github.com/astral-sh/uv) package manager
-- Neo4j 5.x (Community or Enterprise)
-- Docker (recommended for Neo4j)
-
-### Quick Install
+## Quick start
 
 ```bash
-# Clone and enter the project
 cd kloc-intelligence
-
-# Install dependencies with uv
 uv sync --all-extras
-
-# Start Neo4j via Docker
-docker compose up -d
-
-# Wait for Neo4j to be ready, then ensure schema
+docker compose up -d                          # Neo4j 5 + Qdrant 1.12
+cp .env.example .env                          # set LLM_API_KEY + EMBEDDING_API_KEY
 uv run kloc-intelligence schema ensure
+
+# Ingest the structural graph
+uv run kloc-intelligence import /path/to/sot.json
+
+# (Optional) Symfony flows
+uv run kloc-intelligence import-flows /path/to/.kloc/symfony-kloc.json
+
+# (Optional) AI enrichment
+uv run kloc-intelligence enrich
+uv run kloc-intelligence enrich-flows
+
+# Query
+uv run kloc-intelligence context "App\\Service\\OrderService::createOrder"
+uv run kloc-intelligence flows OrderController::create
+uv run kloc-intelligence search "create a new customer order"
 ```
 
-### Environment Variables
+Detailed guides live under `docs/usage/kloc-intelligence/`:
 
-Configuration is via environment variables (or `.env` file):
+- [configuration.md](../docs/usage/kloc-intelligence/configuration.md) —
+  install, env vars, provider recipes
+- [data-setup.md](../docs/usage/kloc-intelligence/data-setup.md) —
+  pipeline order (import → flows → enrich → enrich-flows)
+- [cli.md](../docs/usage/kloc-intelligence/cli.md) — every CLI command
+- [mcp.md](../docs/usage/kloc-intelligence/mcp.md) — MCP server + 16 tools
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `NEO4J_URI` | `bolt://localhost:7687` | Neo4j Bolt endpoint |
-| `NEO4J_USERNAME` | `neo4j` | Neo4j username |
-| `NEO4J_PASSWORD` | `kloc-intelligence` | Neo4j password |
-| `NEO4J_DATABASE` | `neo4j` | Neo4j database name |
+## Commands at a glance
 
-See `.env.example` for a complete template.
+| Group | Commands |
+| --- | --- |
+| Schema | `schema ensure` · `schema verify` · `schema reset` |
+| Ingest | `import` · `import-flows` |
+| Structural | `resolve` · `owners` · `usages` · `deps` · `context` · `inherit` · `overrides` · `flows` |
+| Source | `source` · `chunks` |
+| AI | `enrich` · `enrich-status` · `enrich-flows` · `explain` · `search` |
+| Server | `mcp-server` |
 
-## Quick Start
+All commands accept `--json` for machine-readable output. AI commands accept
+`--debug` to log LLM prompts and embedding bodies.
+
+## Configuration
+
+The two providers are independent. Both default to OpenRouter.
+
+```ini
+# Neo4j (required)
+NEO4J_URI=bolt://localhost:7687
+NEO4J_USERNAME=neo4j
+NEO4J_PASSWORD=kloc-intelligence
+NEO4J_DATABASE=neo4j
+
+# Qdrant (required for AI features)
+QDRANT_URL=http://localhost:6333
+
+# LLM provider — used by enrich, explain, enrich-flows
+LLM_API_URL=https://openrouter.ai/api/v1
+LLM_API_KEY=sk-or-v1-...
+LLM_MODEL=minimax/minimax-m2.7
+
+# Embedding provider — used by enrich, enrich-flows, search
+EMBEDDING_API_URL=https://openrouter.ai/api/v1
+EMBEDDING_API_KEY=sk-or-v1-...
+EMBEDDING_MODEL=qwen/qwen3-embedding-8b
+EMBEDDING_DIMENSION=4096
+
+# Project metadata
+KLOC_PROJECT_ROOT=/path/to/php-project          # required for source / chunks / enrich
+KLOC_PROJECT_NAME=default
+```
+
+Native Google Gemini works out of the box via the OpenAI-compatible endpoint
+(`https://generativelanguage.googleapis.com/v1beta/openai/`); a compat shim in
+`src/ai/_haystack_compat.py` handles Gemini's missing `usage` field. See
+[configuration.md](../docs/usage/kloc-intelligence/configuration.md) for
+provider recipes.
+
+## Architecture
+
+```
+src/
+├── cli.py              # Typer entry point — every CLI command
+├── config.py           # Neo4jConfig from env
+├── server/
+│   └── mcp.py          # MCP server (JSON-RPC 2.0 over stdio), 16 tools
+├── db/
+│   ├── connection.py   # Neo4j driver wrapper
+│   ├── query_runner.py # Cypher executor with logging
+│   ├── schema.py       # Constraints + 13 indexes
+│   ├── importer.py     # sot.json → Neo4j (msgspec parsing)
+│   ├── flow_importer.py# symfony-kloc.json → :Flow nodes + edges
+│   ├── result_mapper.py# Record → NodeData
+│   └── queries/        # One module per structural query (resolve, deps, …)
+├── orchestration/
+│   ├── context.py      # Kind-based dispatcher (Class/Method/Property/Value/…)
+│   ├── class_context.py / interface_context.py / method_context.py / …
+│   ├── usages.py / deps.py / simple.py
+│   └── …               # Reference-type-aware tree builders
+├── logic/              # Pure logic: handlers, reference types, graph helpers
+├── models/
+│   ├── node.py         # NodeData dataclass
+│   ├── results.py      # ContextResult, UsagesTreeResult, etc.
+│   └── output.py       # Contract-compliant ContextOutput (1-based lines, camelCase)
+├── ai/
+│   ├── config.py       # AIConfig + LLMProviderConfig + EmbeddingProviderConfig
+│   ├── pipelines.py    # Haystack pipelines (explain / embed / search / flow)
+│   ├── _haystack_compat.py  # Tolerant embedders for Gemini's missing `usage`
+│   ├── enricher.py     # Class/Method enrichment orchestrator
+│   ├── flow_enricher.py# :Flow business-process summary orchestrator
+│   ├── chunker.py      # Token-bounded chunking for large classes
+│   └── source_reader.py# File + line-range source reader
+└── output/             # Rich console + JSON output formatters
+```
+
+### Graph schema
+
+`:Node` carries every PHP symbol (`Class`, `Method`, `Interface`, `Property`,
+`Value`, `Call`, …). `:Flow` carries Symfony entry points (HTTP routes,
+message handlers, event subscribers, CLI commands).
+
+| Relationship | Direction | Meaning |
+| --- | --- | --- |
+| `CONTAINS` | parent → child | Structural containment |
+| `USES` | source → target | Symbol reference |
+| `EXTENDS` | child → parent | Class/interface inheritance |
+| `IMPLEMENTS` | class → interface | Interface implementation |
+| `OVERRIDES` | child → parent | Method override |
+| `TYPE_HINT` | symbol → type | Type annotation |
+| `CALLS` | caller → callee | Method/function call |
+| `RECEIVER` | call → object | Call receiver |
+| `ARGUMENT` | call → value | Argument passing |
+| `PRODUCES` | call → value | Return value |
+| `ASSIGNED_FROM` | target → source | Value assignment |
+| `TYPE_OF` | value → type | Runtime type |
+| `RETURN_TYPE` | method → type | Return type declaration |
+| `FLOW_ENTRY` | flow → method | Symfony flow entry point |
+| `FLOW_TRIGGERS` | flow → flow | One flow dispatches a message/event another handles |
+
+Indexes are created on `:Node.fqn` / `name` / `kind` / `symbol` / `file` /
+`explanation`, on `:Class.fqn` / `:Method.fqn` / `:Interface.fqn`, on
+`:Value.kind` and `:Call.kind`, and on `:Flow.flow_id` / `:Flow.type`.
+
+### Qdrant collections
+
+| Collection | What it embeds | Populated by |
+| --- | --- | --- |
+| `code_embeddings` | Source-code chunks of Class/Method nodes | `enrich` |
+| `explain_embeddings` | LLM-authored explanations | `enrich` |
+| `flow_explain_embeddings` | Flow business-process summaries | `enrich-flows` |
+
+`search` queries all three by default, dedupes by `node_id`, and returns the
+top hits.
+
+## Development
 
 ```bash
-# 1. Start Neo4j
-docker compose up -d
+uv sync --extra dev --extra ai
 
-# 2. Import a sot.json file
-uv run kloc-intelligence import path/to/sot.json
+# Lint + format check
+uv run ruff check src tests benchmarks
+uv run ruff format --check src tests benchmarks
 
-# 3. Query context for a class
-uv run kloc-intelligence context "App\Entity\Order"
+# Static analysis
+uv run mypy src
 
-# 4. Get JSON output
-uv run kloc-intelligence context "App\Entity\Order" --json
+# Tests (unit + Neo4j integration; snapshots + Haystack tests skipped without fixtures)
+uv run pytest -q --deselect tests/test_snapshot.py --deselect tests/test_flow_enricher.py
+
+# Apply formatter in-place
+uv run ruff format src tests benchmarks
 ```
 
-## Command Reference
+CI runs lint + format check + mypy + pytest on every push and PR — see
+`.github/workflows/ci.yml`. Neo4j 5 and Qdrant 1.12 are spun up as service
+containers in the test job.
 
-### import
+### Snapshot tests
 
-Import a `sot.json` file into Neo4j.
+`tests/test_snapshot.py` reuses the parent-repo snapshot corpus
+(`artifacts/kloc-dev/context-final/sot.json` + `tests/snapshot-2103260323.json`)
+to verify context-query output stays contract-compliant. They are skipped in
+CI because the parent repo's `artifacts/` directory isn't checked in.
 
 ```bash
-uv run kloc-intelligence import <sot-path> [--no-clear] [--no-validate]
+uv run pytest tests/test_snapshot.py -v
 ```
 
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--clear/--no-clear` | `--clear` | Clear database before import |
-| `--validate/--no-validate` | `--validate` | Validate node/edge counts after import |
+### Haystack-dependent tests
 
-### resolve
-
-Resolve a symbol to its definition location(s). Supports exact FQN, partial match, case-insensitive, and suffix matching.
+`tests/test_flow_enricher.py` requires `--extra ai` and is skipped in CI by
+default because Haystack pipelines are expensive to import. Run locally:
 
 ```bash
-uv run kloc-intelligence resolve "App\Entity\Order"
-uv run kloc-intelligence resolve "OrderService::createOrder" --json
+uv run --extra ai pytest tests/test_flow_enricher.py -v
 ```
 
-| Flag | Description |
-|------|-------------|
-| `--json, -j` | Output as JSON |
-
-### usages
-
-Find all usages of a symbol (incoming USES edges) with BFS tree expansion.
+## MCP server
 
 ```bash
-uv run kloc-intelligence usages "App\Entity\Order" --depth 2 --limit 50
-uv run kloc-intelligence usages "App\Entity\Order" --json
+uv run kloc-intelligence mcp-server                                  # default db
+uv run kloc-intelligence mcp-server --database my_app_db             # named db
+uv run kloc-intelligence mcp-server --config /path/to/projects.json  # multi-project
 ```
 
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--depth, -d` | 1 | BFS depth for expansion |
-| `--limit, -l` | 100 | Maximum total results |
-| `--json, -j` | | Output as JSON |
-
-### deps
-
-Find all dependencies of a symbol (outgoing USES edges) with BFS tree expansion.
-
-```bash
-uv run kloc-intelligence deps "App\Service\OrderService" --depth 2
-uv run kloc-intelligence deps "App\Service\OrderService" --json
-```
-
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--depth, -d` | 1 | BFS depth for expansion |
-| `--limit, -l` | 100 | Maximum total results |
-| `--json, -j` | | Output as JSON |
-
-### context
-
-Get bidirectional context: what uses a symbol and what it uses. The most powerful query -- produces definition metadata, USED BY tree, and USES tree with execution flow, argument tracking, and polymorphic analysis.
-
-```bash
-uv run kloc-intelligence context "App\Entity\Order"
-uv run kloc-intelligence context "App\Service\OrderService::createOrder()" --depth 2 --impl
-uv run kloc-intelligence context "App\Entity\Order::$total" --json
-```
-
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--depth, -d` | 1 | BFS depth for expansion |
-| `--limit, -l` | 100 | Maximum results per direction |
-| `--impl, -i` | off | Include implementations/overrides |
-| `--direct` | off | Direct references only |
-| `--with-imports` | off | Include PHP import statements |
-| `--json, -j` | | Output as JSON |
-
-### owners
-
-Show the structural containment chain for a symbol (e.g., Method -> Class -> File).
-
-```bash
-uv run kloc-intelligence owners "App\Service\OrderService::createOrder()"
-uv run kloc-intelligence owners "App\Entity\Order::$total" --json
-```
-
-| Flag | Description |
-|------|-------------|
-| `--json, -j` | Output as JSON |
-
-### inherit
-
-Show the inheritance tree for a class, interface, trait, or enum.
-
-```bash
-uv run kloc-intelligence inherit "App\Entity\Order" --direction up
-uv run kloc-intelligence inherit "App\Component\OrderProcessorInterface" --direction down --depth 3
-```
-
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--direction, -D` | `up` | `up` (ancestors) or `down` (descendants) |
-| `--depth, -d` | 5 | Maximum BFS depth |
-| `--limit, -l` | 100 | Maximum total results |
-| `--json, -j` | | Output as JSON |
-
-### overrides
-
-Show the override chain for a method.
-
-```bash
-uv run kloc-intelligence overrides "App\Service\LoggingOrderProcessor::process()" --direction up
-uv run kloc-intelligence overrides "App\Component\OrderProcessorInterface::process()" --direction down
-```
-
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--direction, -D` | `up` | `up` (parent methods) or `down` (overriding methods) |
-| `--depth, -d` | 5 | Maximum BFS depth |
-| `--limit, -l` | 100 | Maximum total results |
-| `--json, -j` | | Output as JSON |
-
-### schema (subcommands)
-
-Manage the Neo4j schema (constraints and indexes).
-
-```bash
-uv run kloc-intelligence schema ensure    # Create constraints + indexes
-uv run kloc-intelligence schema reset     # Drop all data and recreate schema
-uv run kloc-intelligence schema verify    # Show schema status and counts
-```
-
-## MCP Server
-
-kloc-intelligence includes an MCP (Model Context Protocol) server for AI agent integration. The server communicates via stdio using JSON-RPC 2.0.
-
-### Starting the Server
-
-```bash
-# Single-project mode
-uv run kloc-intelligence mcp-server --database neo4j
-
-# Multi-project mode with config file
-uv run kloc-intelligence mcp-server --config projects.json
-```
-
-### MCP Config File Format
-
-```json
-{
-  "projects": {
-    "my-app": "my_app_db",
-    "payments": "payments_db"
-  }
-}
-```
-
-### Available MCP Tools
-
-| Tool | Description |
-|------|-------------|
-| `kloc_resolve` | Resolve a symbol to its definition location |
-| `kloc_usages` | Find all usages of a symbol |
-| `kloc_deps` | Find all dependencies of a symbol |
-| `kloc_context` | Get bidirectional context (used by + uses) |
-| `kloc_owners` | Show structural containment chain |
-| `kloc_inherit` | Show inheritance tree |
-| `kloc_overrides` | Show override chain for a method |
-| `kloc_import` | Import a sot.json file into Neo4j |
-
-### Claude Desktop Integration
-
-Add to your `claude_desktop_config.json`:
+Wire into Claude Code's `~/.claude.json` (or any MCP-aware client):
 
 ```json
 {
   "mcpServers": {
-    "kloc": {
+    "kloc-intelligence": {
       "command": "uv",
-      "args": ["--directory", "/path/to/kloc-intelligence", "run", "kloc-intelligence", "mcp-server"],
+      "args": ["run", "kloc-intelligence", "mcp-server"],
+      "cwd": "/path/to/kloc-intelligence",
       "env": {
-        "NEO4J_URI": "bolt://localhost:7687",
-        "NEO4J_USERNAME": "neo4j",
-        "NEO4J_PASSWORD": "kloc-intelligence"
+        "KLOC_PROJECT_ROOT": "/path/to/php-project"
       }
     }
   }
 }
 ```
 
-## Architecture
-
-### Neo4j Graph Model
-
-**Node labels**: Every symbol is a `:Node` with an additional kind-specific label (`:Class`, `:Method`, `:Interface`, `:Property`, `:Value`, `:Call`, `:File`, etc.).
-
-**Node properties**: `node_id` (unique), `kind`, `name`, `fqn`, `symbol`, `file`, `start_line`, `end_line`, `signature`, `documentation`, and more.
-
-**Relationship types** (13 total):
-
-| Relationship | Direction | Meaning |
-|-------------|-----------|---------|
-| `CONTAINS` | parent -> child | Structural containment (Class -> Method) |
-| `USES` | source -> target | Symbol reference |
-| `EXTENDS` | child -> parent | Class/interface inheritance |
-| `IMPLEMENTS` | class -> interface | Interface implementation |
-| `OVERRIDES` | child -> parent | Method override |
-| `TYPE_HINT` | symbol -> type | Type annotation |
-| `CALLS` | caller -> callee | Method/function call |
-| `RECEIVER` | call -> object | Call receiver |
-| `ARGUMENT` | call -> value | Argument passing |
-| `PRODUCES` | call -> value | Return value |
-| `ASSIGNED_FROM` | target -> source | Value assignment |
-| `TYPE_OF` | value -> type | Runtime type |
-| `RETURN_TYPE` | method -> type | Return type declaration |
-
-**Indexes**: FQN, name, kind, symbol, file on `:Node`; plus kind-specific indexes on `:Class`, `:Method`, `:Interface` FQN fields.
-
-### Source Layout
-
-```
-src/
-  cli.py              # Typer CLI with all 8 commands
-  config.py           # Neo4jConfig from env vars
-  db/
-    connection.py      # Neo4j driver wrapper
-    query_runner.py    # Cypher query executor with logging
-    schema.py          # Constraints, indexes, schema management
-    importer.py        # sot.json parser + batch Neo4j import
-    result_mapper.py   # Neo4j Record -> NodeData conversion
-    queries/           # Cypher query modules per command
-      resolve.py       # Symbol resolution (6-stage cascade)
-      usages.py        # Incoming USES edge queries
-      deps.py          # Outgoing USES edge queries
-      owners.py        # CONTAINS chain traversal
-      inherit.py       # EXTENDS/IMPLEMENTS BFS
-      overrides.py     # OVERRIDES BFS
-      definition.py    # Structural definition metadata
-      context_*.py     # Kind-specific context queries
-      helpers.py       # Shared query utilities
-  logic/
-    definition.py      # Definition builder from query data
-    handlers.py        # Reference type handlers
-    reference_types.py # Reference type classification
-    graph_helpers.py   # Graph traversal utilities
-    polymorphic.py     # Interface -> concrete resolution
-  models/
-    node.py            # NodeData dataclass
-    results.py         # Result models (UsagesTreeResult, etc.)
-    output.py          # Contract-compliant output serialization
-  orchestration/
-    usages.py          # Usages command orchestrator
-    deps.py            # Deps command orchestrator
-    simple.py          # Owners, inherit, overrides orchestrators
-    context.py         # Context command orchestrator (dispatch)
-    class_context.py   # Class USED BY / USES builders
-    interface_context.py
-    method_context.py
-    property_context.py
-    value_context.py
-    generic_context.py
-  output/
-    json_formatter.py  # JSON output
-    console.py         # Rich console formatters
-  server/
-    mcp.py             # MCP server (JSON-RPC 2.0 over stdio)
-```
-
-### Query Flow
-
-1. **CLI** parses arguments via Typer
-2. **Orchestrator** resolves the symbol, dispatches to kind-specific builders
-3. **Query modules** execute Cypher against Neo4j via `QueryRunner`
-4. **Result mapper** converts Neo4j Records to `NodeData` objects
-5. **Result models** aggregate into tree structures
-6. **Output layer** serializes to JSON (contract-compliant) or Rich console
-
-## Testing
-
-```bash
-# Run all tests (974 tests)
-uv run pytest tests/ -v
-
-# Run specific test file
-uv run pytest tests/test_class_context.py -v
-
-# Run with keyword filter
-uv run pytest tests/ -k "test_resolve" -v
-
-# Lint check
-uv run ruff check src/ tests/
-```
-
-Tests use a mock `QueryRunner` to simulate Neo4j responses, so they do not require a running Neo4j instance. Integration tests that need Neo4j are skipped automatically when it is unavailable.
+The 16 tools then become callable as
+`mcp__kloc-intelligence__kloc_context`, etc. See
+[mcp.md](../docs/usage/kloc-intelligence/mcp.md) for the full catalog.
 
 ## Performance
 
-### Benchmarks
+| Query | Mean (reference project, 1154 nodes) |
+| --- | --- |
+| `resolve` (exact FQN) | ~1 ms |
+| `usages` / `deps` (d=1) | ~2 ms |
+| `context` class / method (d=1) | 10-15 ms |
+| `inherit` / `overrides` | ~2 ms |
+| `enrich` (per node) | 1 LLM + 2 embedding calls (~2-5 s) |
+| `enrich-flows` (per flow) | 1 LLM + 1 embedding call (~2-5 s) |
+| `search` (3 collections merged) | ~50 ms |
 
-Run the standalone benchmark suite (requires Neo4j with loaded data):
-
-```bash
-uv run python benchmarks/benchmark_queries.py
-uv run python benchmarks/benchmark_queries.py --iterations 20 --verbose
-uv run python benchmarks/benchmark_queries.py --group context
-```
-
-### Typical Results (1154 nodes, 2697 edges)
-
-| Query | Mean | Notes |
-|-------|------|-------|
-| resolve (exact FQN) | ~1ms | Indexed lookup |
-| usages d=1 | ~2ms | Single-hop BFS |
-| deps d=1 | ~2ms | Single-hop BFS |
-| context class d=1 | ~10ms | Bidirectional + definition |
-| context method d=1 | ~15ms | Execution flow + arguments |
-| owners | ~1ms | CONTAINS chain |
-| inherit | ~2ms | EXTENDS/IMPLEMENTS BFS |
-| overrides | ~1ms | OVERRIDES BFS |
-
-Context queries are the most complex, combining definition metadata, USED BY traversal, and USES traversal with execution flow analysis, argument tracking, and polymorphic resolution.
-
-### Large Dataset Performance
-
-For production-scale codebases (721K nodes, 1.6M edges), use the tuned Neo4j config in `docker/neo4j.conf`. Key settings:
-
-- Heap: 4-8 GB
-- Page cache: 2-4 GB (should fit entire graph)
-- Connection pool: 50 connections
-
-## Comparison with kloc-cli
-
-| Feature | kloc-cli | kloc-intelligence |
-|---------|----------|-------------------|
-| Backend | In-memory trie + adjacency lists | Neo4j graph database |
-| Startup | Loads sot.json every invocation | Import once, query many times |
-| Small codebases (<10K nodes) | Faster (no server overhead) | Slightly slower (Neo4j RTT) |
-| Large codebases (>100K nodes) | 12s+ load time per query | Sub-second after import |
-| Persistent | No | Yes (data survives restarts) |
-| MCP Server | Yes (stdio) | Yes (stdio, multi-project) |
-| Multi-project | No | Yes (separate Neo4j databases) |
-| Query language | Python graph traversal | Cypher (declarative) |
-| Output format | Identical JSON contract | Identical JSON contract |
-
-**When to use kloc-cli**: Quick one-off queries on small codebases, no Docker/Neo4j available.
-
-**When to use kloc-intelligence**: Large codebases, persistent analysis, multi-project setups, CI/CD integration, AI agent workflows with many queries.
-
-## Docker
-
-### Development (Neo4j only)
-
-```bash
-docker compose up -d
-```
-
-### Production (Neo4j + kloc-intelligence)
-
-```bash
-cd docker
-docker compose up -d
-```
-
-See `docker/` directory for production-ready Docker Compose, Dockerfile, and tuned Neo4j configuration.
+For datasets >500K nodes bump `NEO4J_HEAP_MAX` (see `docker-compose.yml`).
+The largest tested graph is 721K nodes / 1.6M edges from a real codebase.
 
 ## License
 
-Internal tool -- not for public distribution.
+Internal tool — not for public distribution.

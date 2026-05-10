@@ -17,10 +17,10 @@ from typing import Any
 from haystack import component
 from haystack.components.embedders import (
     OpenAIDocumentEmbedder as _OpenAIDocumentEmbedder,
+)
+from haystack.components.embedders import (
     OpenAITextEmbedder as _OpenAITextEmbedder,
 )
-from haystack.dataclasses import Document
-
 
 _EMPTY_USAGE = {"prompt_tokens": 0, "total_tokens": 0}
 
@@ -71,9 +71,7 @@ class TolerantDocumentEmbedder(_OpenAIDocumentEmbedder):
                 continue
 
             embeddings = [el.embedding for el in response.data]
-            doc_ids_to_embeddings.update(
-                dict(zip((b[0] for b in batch), embeddings, strict=True))
-            )
+            doc_ids_to_embeddings.update(dict(zip((b[0] for b in batch), embeddings, strict=True)))
 
             if "model" not in meta:
                 meta["model"] = response.model
@@ -107,9 +105,7 @@ class TolerantTextEmbedder(_OpenAITextEmbedder):
                 input=text_to_embed,
             )
         else:
-            response = self.client.embeddings.create(
-                model=self.model, input=text_to_embed
-            )
+            response = self.client.embeddings.create(model=self.model, input=text_to_embed)
 
         return {
             "embedding": response.data[0].embedding,

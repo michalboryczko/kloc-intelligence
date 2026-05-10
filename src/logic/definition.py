@@ -8,10 +8,8 @@ kind-specific builders based on node kind.
 """
 
 import re  # used in parse_property_doc
-from typing import Optional
 
 from ..models.results import DefinitionInfo
-
 
 
 def build_definition(data: dict) -> DefinitionInfo:
@@ -186,6 +184,7 @@ def build_class_definition(data: dict, info: DefinitionInfo) -> None:
         if "inherited" in tags:
             return 1
         return 2
+
     info.methods.sort(key=_method_sort_key)
 
     # Constructor deps: promoted parameters with their types
@@ -311,7 +310,7 @@ def build_property_definition(data: dict, info: DefinitionInfo) -> None:
 
 def parse_property_doc(
     documentation: list[str] | None, name: str
-) -> tuple[Optional[str], bool, bool, Optional[str]]:
+) -> tuple[str | None, bool, bool, str | None]:
     """Parse property documentation for visibility, readonly, static, type.
 
     SCIP documentation for properties looks like:
@@ -358,8 +357,7 @@ def parse_property_doc(
             # Extract type: everything between modifiers and the property name
             # Pattern: [visibility] [static] [readonly] TYPE $name
             match = re.search(
-                r'(?:public|protected|private)?\s*(?:static\s+)?(?:readonly\s+)?(\S+)\s+\$',
-                line
+                r"(?:public|protected|private)?\s*(?:static\s+)?(?:readonly\s+)?(\S+)\s+\$", line
             )
             if match:
                 raw_type = match.group(1)

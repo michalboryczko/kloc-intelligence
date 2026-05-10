@@ -1,4 +1,5 @@
-from neo4j import GraphDatabase, Driver, Session
+from neo4j import Driver, GraphDatabase, Session
+
 from ..config import Neo4jConfig
 
 

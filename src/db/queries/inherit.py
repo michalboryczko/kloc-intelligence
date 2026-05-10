@@ -18,9 +18,7 @@ RETURN child
 """
 
 
-def query_inherit_neighbors(
-    runner: QueryRunner, node_id: str, direction: str
-) -> list[dict]:
+def query_inherit_neighbors(runner: QueryRunner, node_id: str, direction: str) -> list[dict]:
     """Query direct inheritance neighbors for a node.
 
     Args:
@@ -37,11 +35,13 @@ def query_inherit_neighbors(
     results = []
     for record in records:
         node = record[key]
-        results.append({
-            "node_id": node["node_id"],
-            "fqn": node["fqn"],
-            "kind": node["kind"],
-            "file": node.get("file"),
-            "start_line": node.get("start_line"),
-        })
+        results.append(
+            {
+                "node_id": node["node_id"],
+                "fqn": node["fqn"],
+                "kind": node["kind"],
+                "file": node.get("file"),
+                "start_line": node.get("start_line"),
+            }
+        )
     return results

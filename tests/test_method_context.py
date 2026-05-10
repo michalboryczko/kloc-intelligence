@@ -22,23 +22,22 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
+from src.logic.polymorphic import (
+    get_concrete_implementors,
+    get_implementations_for_node,
+    get_interface_method_ids,
+)
 from src.models.node import NodeData
-from src.models.results import ContextEntry, MemberRef, ArgumentInfo
+from src.models.results import ArgumentInfo, ContextEntry, MemberRef
 from src.orchestration.method_context import (
+    _build_argument_infos,
+    _build_member_ref,
+    _resolve_receiver_identity,
     build_execution_flow,
     build_method_used_by,
     filter_orphan_property_accesses,
     get_type_references,
-    _resolve_receiver_identity,
-    _build_member_ref,
-    _build_argument_infos,
 )
-from src.logic.polymorphic import (
-    get_implementations_for_node,
-    get_interface_method_ids,
-    get_concrete_implementors,
-)
-
 
 # =============================================================================
 # Fixtures / Factories
@@ -150,9 +149,15 @@ class TestResolveReceiverIdentity:
     def test_result_recv_with_runner_resolves_property(self):
         runner = MagicMock()
         runner.execute.return_value = [
-            {"prop_fqn": "App\\Svc::$repo", "prop_name": "repo", "recv_kind": "result",
-             "recv_name": None, "src_call_kind": "property_access",
-             "src_recv_kind": "parameter", "src_recv_name": "$this"}
+            {
+                "prop_fqn": "App\\Svc::$repo",
+                "prop_name": "repo",
+                "recv_kind": "result",
+                "recv_name": None,
+                "src_call_kind": "property_access",
+                "src_recv_kind": "parameter",
+                "src_recv_name": "$this",
+            }
         ]
         ac, acs, ok, of, ol = _resolve_receiver_identity("result", None, "call:1", runner)
         assert ac == "$this->repo"
@@ -161,9 +166,15 @@ class TestResolveReceiverIdentity:
     def test_result_recv_with_runner_no_prop(self):
         runner = MagicMock()
         runner.execute.return_value = [
-            {"prop_fqn": None, "prop_name": None, "recv_kind": "result",
-             "recv_name": "rv", "src_call_kind": None,
-             "src_recv_kind": None, "src_recv_name": None}
+            {
+                "prop_fqn": None,
+                "prop_name": None,
+                "recv_kind": "result",
+                "recv_name": "rv",
+                "src_call_kind": None,
+                "src_recv_kind": None,
+                "src_recv_name": None,
+            }
         ]
         ac, acs, ok, of, ol = _resolve_receiver_identity("result", "rv", "call:1", runner)
         # No prop_fqn found; falls through to result
@@ -176,8 +187,7 @@ class TestResolveReceiverIdentity:
 
     def test_parameter_recv_with_file_line(self):
         ac, acs, ok, of, ol = _resolve_receiver_identity(
-            "parameter", "$service", None, None,
-            "src/Service.php", 10
+            "parameter", "$service", None, None, "src/Service.php", 10
         )
         assert ac == "$service"
         assert ok == "param"
@@ -209,8 +219,12 @@ class TestBuildMemberRef:
 
     def test_property_callee_no_parens(self):
         ref = _build_member_ref(
-            "App\\Entity::$name", "name", "Property",
-            "$this", None, "self",
+            "App\\Entity::$name",
+            "name",
+            "Property",
+            "$this",
+            None,
+            "self",
             call_kind="access",
         )
         assert ref is not None
@@ -221,22 +235,34 @@ class TestBuildMemberRef:
 
     def test_access_chain_from_on(self):
         ref = _build_member_ref(
-            "App\\Repo::save", "save", "Method",
-            "App\\Svc::$repo", None, "property",
+            "App\\Repo::save",
+            "save",
+            "Method",
+            "App\\Svc::$repo",
+            None,
+            "property",
         )
         assert ref.access_chain == "App\\Svc::$repo"
 
     def test_access_chain_fallback_to_recv_name(self):
         ref = _build_member_ref(
-            "App\\Repo::save", "save", "Method",
-            "$this->repo", None, "property",
+            "App\\Repo::save",
+            "save",
+            "Method",
+            "$this->repo",
+            None,
+            "property",
         )
         assert ref.access_chain == "$this->repo"
 
     def test_call_kind_maps_to_reference_type(self):
         ref = _build_member_ref(
-            "App\\Entity", "__construct", "Method",
-            None, None, None,
+            "App\\Entity",
+            "__construct",
+            "Method",
+            None,
+            None,
+            None,
             call_kind="constructor",
         )
         assert ref.reference_type == "instantiation"
@@ -256,8 +282,15 @@ class TestBuildArgumentInfos:
 
     def test_single_argument(self):
         args_by_call = {
-            "call:1": [{"position": 0, "expression": "$id", "value_kind": "local",
-                         "value_type": "int", "value_fqn": None}]
+            "call:1": [
+                {
+                    "position": 0,
+                    "expression": "$id",
+                    "value_kind": "local",
+                    "value_type": "int",
+                    "value_fqn": None,
+                }
+            ]
         }
         infos = _build_argument_infos("call:1", args_by_call)
         assert len(infos) == 1
@@ -269,8 +302,20 @@ class TestBuildArgumentInfos:
     def test_multiple_arguments_sorted_by_position(self):
         args_by_call = {
             "call:1": [
-                {"position": 1, "expression": "$b", "value_kind": "local", "value_type": None, "value_fqn": None},
-                {"position": 0, "expression": "$a", "value_kind": "local", "value_type": None, "value_fqn": None},
+                {
+                    "position": 1,
+                    "expression": "$b",
+                    "value_kind": "local",
+                    "value_type": None,
+                    "value_fqn": None,
+                },
+                {
+                    "position": 0,
+                    "expression": "$a",
+                    "value_kind": "local",
+                    "value_type": None,
+                    "value_fqn": None,
+                },
             ]
         }
         infos = _build_argument_infos("call:1", args_by_call)
@@ -281,8 +326,15 @@ class TestBuildArgumentInfos:
 
     def test_skips_records_without_position(self):
         args_by_call = {
-            "call:1": [{"position": None, "expression": "$x", "value_kind": "local",
-                         "value_type": None, "value_fqn": None}]
+            "call:1": [
+                {
+                    "position": None,
+                    "expression": "$x",
+                    "value_kind": "local",
+                    "value_type": None,
+                    "value_fqn": None,
+                }
+            ]
         }
         infos = _build_argument_infos("call:1", args_by_call)
         assert infos == []
@@ -296,7 +348,9 @@ class TestBuildArgumentInfos:
 class TestFilterOrphanPropertyAccesses:
     """Tests for orphan property access filtering."""
 
-    def _make_call_entry(self, ref_type: str, access_chain: str | None = None, **kwargs) -> ContextEntry:
+    def _make_call_entry(
+        self, ref_type: str, access_chain: str | None = None, **kwargs
+    ) -> ContextEntry:
         member_ref = MemberRef(
             target_name="prop",
             target_fqn="App\\Entity::$prop",
@@ -346,9 +400,7 @@ class TestFilterOrphanPropertyAccesses:
             node_id="m:2",
             fqn="App\\Svc::save()",
             entry_type="call",
-            arguments=[
-                ArgumentInfo(position=0, value_expr="$order->status")
-            ],
+            arguments=[ArgumentInfo(position=0, value_expr="$order->status")],
         )
         result = filter_orphan_property_accesses([prop_entry, method_entry])
         # prop_entry filtered because "$order->status" is in argument value_exprs
@@ -414,54 +466,66 @@ class TestGetTypeReferences:
 
     def test_return_type_is_skipped(self):
         """return_type entries are excluded (shown in DEFINITION section)."""
-        runner = self._make_type_ref_runner([{
-            "target_id": "cls:Result",
-            "target_fqn": "App\\Result",
-            "target_kind": "Class",
-            "target_signature": None,
-            "target_file": "src/Result.php",
-            "target_start_line": 5,
-            "file": "src/Service.php",
-            "line": 30,
-            "has_arg_th": False,
-            "has_ret_th": True,
-        }])
+        runner = self._make_type_ref_runner(
+            [
+                {
+                    "target_id": "cls:Result",
+                    "target_fqn": "App\\Result",
+                    "target_kind": "Class",
+                    "target_signature": None,
+                    "target_file": "src/Result.php",
+                    "target_start_line": 5,
+                    "file": "src/Service.php",
+                    "line": 30,
+                    "has_arg_th": False,
+                    "has_ret_th": True,
+                }
+            ]
+        )
         result = get_type_references(runner, "m:doWork")
         # return_type is excluded
         assert len(result) == 0
 
     def test_parameter_type_wins_over_return_type(self):
         """parameter_type is excluded (shown in DEFINITION section)."""
-        runner = self._make_type_ref_runner([{
-            "target_id": "cls:Entity",
-            "target_fqn": "App\\Entity",
-            "target_kind": "Class",
-            "target_signature": None,
-            "target_file": None,
-            "target_start_line": None,
-            "file": None,
-            "line": None,
-            "has_arg_th": True,
-            "has_ret_th": True,
-        }])
+        runner = self._make_type_ref_runner(
+            [
+                {
+                    "target_id": "cls:Entity",
+                    "target_fqn": "App\\Entity",
+                    "target_kind": "Class",
+                    "target_signature": None,
+                    "target_file": None,
+                    "target_start_line": None,
+                    "file": None,
+                    "line": None,
+                    "has_arg_th": True,
+                    "has_ret_th": True,
+                }
+            ]
+        )
         result = get_type_references(runner, "m:doWork")
         # parameter_type is excluded
         assert len(result) == 0
 
     def test_type_hint_fallback(self):
         """type_hint entries are included with a member_ref."""
-        runner = self._make_type_ref_runner([{
-            "target_id": "cls:Dep",
-            "target_fqn": "App\\Dep",
-            "target_kind": "Interface",
-            "target_signature": None,
-            "target_file": None,
-            "target_start_line": None,
-            "file": None,
-            "line": None,
-            "has_arg_th": False,
-            "has_ret_th": False,
-        }])
+        runner = self._make_type_ref_runner(
+            [
+                {
+                    "target_id": "cls:Dep",
+                    "target_fqn": "App\\Dep",
+                    "target_kind": "Interface",
+                    "target_signature": None,
+                    "target_file": None,
+                    "target_start_line": None,
+                    "file": None,
+                    "line": None,
+                    "has_arg_th": False,
+                    "has_ret_th": False,
+                }
+            ]
+        )
         result = get_type_references(runner, "m:doWork")
         assert len(result) == 1
         assert result[0].ref_type is None  # No top-level ref_type
@@ -470,25 +534,56 @@ class TestGetTypeReferences:
         assert result[0].member_ref.target_fqn == "App\\Dep"
 
     def test_deduplication_by_target_id(self):
-        runner = self._make_type_ref_runner([
-            {"target_id": "cls:X", "target_fqn": "App\\X", "target_kind": "Class",
-             "target_signature": None, "target_file": None, "target_start_line": None,
-             "file": None, "line": None, "has_arg_th": False, "has_ret_th": False},
-            {"target_id": "cls:X", "target_fqn": "App\\X", "target_kind": "Class",
-             "target_signature": None, "target_file": None, "target_start_line": None,
-             "file": None, "line": None, "has_arg_th": False, "has_ret_th": False},
-        ])
+        runner = self._make_type_ref_runner(
+            [
+                {
+                    "target_id": "cls:X",
+                    "target_fqn": "App\\X",
+                    "target_kind": "Class",
+                    "target_signature": None,
+                    "target_file": None,
+                    "target_start_line": None,
+                    "file": None,
+                    "line": None,
+                    "has_arg_th": False,
+                    "has_ret_th": False,
+                },
+                {
+                    "target_id": "cls:X",
+                    "target_fqn": "App\\X",
+                    "target_kind": "Class",
+                    "target_signature": None,
+                    "target_file": None,
+                    "target_start_line": None,
+                    "file": None,
+                    "line": None,
+                    "has_arg_th": False,
+                    "has_ret_th": False,
+                },
+            ]
+        )
         result = get_type_references(runner, "m:doWork")
         # Only one entry for cls:X (dedup)
         assert len(result) == 1
 
     def test_limit_via_count(self):
-        runner = self._make_type_ref_runner([
-            {"target_id": f"cls:{i}", "target_fqn": f"App\\X{i}", "target_kind": "Class",
-             "target_signature": None, "target_file": None, "target_start_line": None,
-             "file": None, "line": None, "has_arg_th": False, "has_ret_th": False}
-            for i in range(10)
-        ])
+        runner = self._make_type_ref_runner(
+            [
+                {
+                    "target_id": f"cls:{i}",
+                    "target_fqn": f"App\\X{i}",
+                    "target_kind": "Class",
+                    "target_signature": None,
+                    "target_file": None,
+                    "target_start_line": None,
+                    "file": None,
+                    "line": None,
+                    "has_arg_th": False,
+                    "has_ret_th": False,
+                }
+                for i in range(10)
+            ]
+        )
         count = [0]
         result = get_type_references(runner, "m:doWork", count=count, limit=3)
         assert len(result) == 3
@@ -511,30 +606,32 @@ class TestBuildExecutionFlow:
     def test_kind2_standalone_call(self):
         """A call with no local_id is a Kind 2 standalone call entry."""
         runner = make_execution_data_runner(
-            calls=[{
-                "call_id": "call:1",
-                "call_kind": "method",
-                "call_name": "save",
-                "call_file": "src/Service.php",
-                "call_line": 30,
-                "callee_id": "m:save",
-                "callee_fqn": "App\\Repo::save",
-                "callee_kind": "Method",
-                "callee_name": "save",
-                "callee_signature": "save(int $id): void",
-                "callee_file": "src/Repo.php",
-                "callee_start_line": 10,
-                "recv_id": None,
-                "recv_value_kind": None,
-                "recv_name": None,
-                "recv_source_call_id": None,
-                "result_id": None,
-                "local_id": None,
-                "local_fqn": None,
-                "local_name": None,
-                "local_line": None,
-                "local_type_name": None,
-            }]
+            calls=[
+                {
+                    "call_id": "call:1",
+                    "call_kind": "method",
+                    "call_name": "save",
+                    "call_file": "src/Service.php",
+                    "call_line": 30,
+                    "callee_id": "m:save",
+                    "callee_fqn": "App\\Repo::save",
+                    "callee_kind": "Method",
+                    "callee_name": "save",
+                    "callee_signature": "save(int $id): void",
+                    "callee_file": "src/Repo.php",
+                    "callee_start_line": 10,
+                    "recv_id": None,
+                    "recv_value_kind": None,
+                    "recv_name": None,
+                    "recv_source_call_id": None,
+                    "result_id": None,
+                    "local_id": None,
+                    "local_fqn": None,
+                    "local_name": None,
+                    "local_line": None,
+                    "local_type_name": None,
+                }
+            ]
         )
         result = build_execution_flow(runner, "m:doWork")
         assert len(result) == 1
@@ -547,30 +644,32 @@ class TestBuildExecutionFlow:
     def test_kind1_local_variable(self):
         """A call with local_id produces a Kind 1 local_variable entry."""
         runner = make_execution_data_runner(
-            calls=[{
-                "call_id": "call:1",
-                "call_kind": "method",
-                "call_name": "find",
-                "call_file": "src/Service.php",
-                "call_line": 20,
-                "callee_id": "m:find",
-                "callee_fqn": "App\\Repo::find",
-                "callee_kind": "Method",
-                "callee_name": "find",
-                "callee_signature": "find(int $id): Entity",
-                "callee_file": "src/Repo.php",
-                "callee_start_line": 5,
-                "recv_id": None,
-                "recv_value_kind": "parameter",
-                "recv_name": "$this",
-                "recv_source_call_id": None,
-                "result_id": "val:result",
-                "local_id": "val:order",
-                "local_fqn": "App\\Service::doWork::$order",
-                "local_name": "$order",
-                "local_line": 20,
-                "local_type_name": "Order",
-            }]
+            calls=[
+                {
+                    "call_id": "call:1",
+                    "call_kind": "method",
+                    "call_name": "find",
+                    "call_file": "src/Service.php",
+                    "call_line": 20,
+                    "callee_id": "m:find",
+                    "callee_fqn": "App\\Repo::find",
+                    "callee_kind": "Method",
+                    "callee_name": "find",
+                    "callee_signature": "find(int $id): Entity",
+                    "callee_file": "src/Repo.php",
+                    "callee_start_line": 5,
+                    "recv_id": None,
+                    "recv_value_kind": "parameter",
+                    "recv_name": "$this",
+                    "recv_source_call_id": None,
+                    "result_id": "val:result",
+                    "local_id": "val:order",
+                    "local_fqn": "App\\Service::doWork::$order",
+                    "local_name": "$order",
+                    "local_line": 20,
+                    "local_type_name": "Order",
+                }
+            ]
         )
         result = build_execution_flow(runner, "m:doWork")
         assert len(result) == 1
@@ -647,30 +746,32 @@ class TestBuildExecutionFlow:
     def test_external_call_no_callee_id(self):
         """External calls (callee_id=None) produce entries without recursion."""
         runner = make_execution_data_runner(
-            calls=[{
-                "call_id": "call:ext",
-                "call_kind": "function",
-                "call_name": "array_map",
-                "call_file": "src/S.php",
-                "call_line": 15,
-                "callee_id": None,
-                "callee_fqn": None,
-                "callee_kind": None,
-                "callee_name": "array_map",
-                "callee_signature": None,
-                "callee_file": None,
-                "callee_start_line": None,
-                "recv_id": None,
-                "recv_value_kind": None,
-                "recv_name": None,
-                "recv_source_call_id": None,
-                "result_id": None,
-                "local_id": None,
-                "local_fqn": None,
-                "local_name": None,
-                "local_line": None,
-                "local_type_name": None,
-            }]
+            calls=[
+                {
+                    "call_id": "call:ext",
+                    "call_kind": "function",
+                    "call_name": "array_map",
+                    "call_file": "src/S.php",
+                    "call_line": 15,
+                    "callee_id": None,
+                    "callee_fqn": None,
+                    "callee_kind": None,
+                    "callee_name": "array_map",
+                    "callee_signature": None,
+                    "callee_file": None,
+                    "callee_start_line": None,
+                    "recv_id": None,
+                    "recv_value_kind": None,
+                    "recv_name": None,
+                    "recv_source_call_id": None,
+                    "result_id": None,
+                    "local_id": None,
+                    "local_fqn": None,
+                    "local_name": None,
+                    "local_line": None,
+                    "local_type_name": None,
+                }
+            ]
         )
         result = build_execution_flow(runner, "m:doWork")
         assert len(result) == 1
@@ -681,30 +782,32 @@ class TestBuildExecutionFlow:
     def test_cycle_guard_prevents_infinite_recursion(self):
         """cycle_guard prevents visiting the same callee twice."""
         runner = make_execution_data_runner(
-            calls=[{
-                "call_id": "call:1",
-                "call_kind": "method",
-                "call_name": "process",
-                "call_file": None,
-                "call_line": 5,
-                "callee_id": "m:process",
-                "callee_fqn": "App\\Svc::process",
-                "callee_kind": "Method",
-                "callee_name": "process",
-                "callee_signature": None,
-                "callee_file": None,
-                "callee_start_line": None,
-                "recv_id": None,
-                "recv_value_kind": None,
-                "recv_name": None,
-                "recv_source_call_id": None,
-                "result_id": None,
-                "local_id": None,
-                "local_fqn": None,
-                "local_name": None,
-                "local_line": None,
-                "local_type_name": None,
-            }]
+            calls=[
+                {
+                    "call_id": "call:1",
+                    "call_kind": "method",
+                    "call_name": "process",
+                    "call_file": None,
+                    "call_line": 5,
+                    "callee_id": "m:process",
+                    "callee_fqn": "App\\Svc::process",
+                    "callee_kind": "Method",
+                    "callee_name": "process",
+                    "callee_signature": None,
+                    "callee_file": None,
+                    "callee_start_line": None,
+                    "recv_id": None,
+                    "recv_value_kind": None,
+                    "recv_name": None,
+                    "recv_source_call_id": None,
+                    "result_id": None,
+                    "local_id": None,
+                    "local_fqn": None,
+                    "local_name": None,
+                    "local_line": None,
+                    "local_type_name": None,
+                }
+            ]
         )
         # Add callee to cycle guard upfront
         cycle_guard = {"m:process"}
@@ -716,30 +819,32 @@ class TestBuildExecutionFlow:
         """Recursion stops when depth > max_depth."""
         # We use a fresh runner for the nested call too
         runner = make_execution_data_runner(
-            calls=[{
-                "call_id": "call:1",
-                "call_kind": "method",
-                "call_name": "helper",
-                "call_file": None,
-                "call_line": 5,
-                "callee_id": "m:helper",
-                "callee_fqn": "App\\Svc::helper",
-                "callee_kind": "Method",
-                "callee_name": "helper",
-                "callee_signature": None,
-                "callee_file": None,
-                "callee_start_line": None,
-                "recv_id": None,
-                "recv_value_kind": None,
-                "recv_name": None,
-                "recv_source_call_id": None,
-                "result_id": None,
-                "local_id": None,
-                "local_fqn": None,
-                "local_name": None,
-                "local_line": None,
-                "local_type_name": None,
-            }]
+            calls=[
+                {
+                    "call_id": "call:1",
+                    "call_kind": "method",
+                    "call_name": "helper",
+                    "call_file": None,
+                    "call_line": 5,
+                    "callee_id": "m:helper",
+                    "callee_fqn": "App\\Svc::helper",
+                    "callee_kind": "Method",
+                    "callee_name": "helper",
+                    "callee_signature": None,
+                    "callee_file": None,
+                    "callee_start_line": None,
+                    "recv_id": None,
+                    "recv_value_kind": None,
+                    "recv_name": None,
+                    "recv_source_call_id": None,
+                    "result_id": None,
+                    "local_id": None,
+                    "local_fqn": None,
+                    "local_name": None,
+                    "local_line": None,
+                    "local_type_name": None,
+                }
+            ]
         )
         # max_depth=1 means no recursion
         result = build_execution_flow(runner, "m:doWork", max_depth=1)
@@ -750,32 +855,34 @@ class TestBuildExecutionFlow:
     def test_receiver_identity_param_on_kind(self):
         """Method called on a parameter has member_ref.on_kind='param'."""
         runner = make_execution_data_runner(
-            calls=[{
-                "call_id": "call:1",
-                "call_kind": "method",
-                "call_name": "save",
-                "call_file": None,
-                "call_line": 5,
-                "callee_id": "m:save",
-                "callee_fqn": "App\\Repo::save",
-                "callee_kind": "Method",
-                "callee_name": "save",
-                "callee_signature": None,
-                "callee_file": None,
-                "callee_start_line": None,
-                "recv_id": "v:repo",
-                "recv_value_kind": "parameter",
-                "recv_name": "$repo",
-                "recv_file": "src/Service.php",
-                "recv_start_line": 25,
-                "recv_source_call_id": None,
-                "result_id": None,
-                "local_id": None,
-                "local_fqn": None,
-                "local_name": None,
-                "local_line": None,
-                "local_type_name": None,
-            }]
+            calls=[
+                {
+                    "call_id": "call:1",
+                    "call_kind": "method",
+                    "call_name": "save",
+                    "call_file": None,
+                    "call_line": 5,
+                    "callee_id": "m:save",
+                    "callee_fqn": "App\\Repo::save",
+                    "callee_kind": "Method",
+                    "callee_name": "save",
+                    "callee_signature": None,
+                    "callee_file": None,
+                    "callee_start_line": None,
+                    "recv_id": "v:repo",
+                    "recv_value_kind": "parameter",
+                    "recv_name": "$repo",
+                    "recv_file": "src/Service.php",
+                    "recv_start_line": 25,
+                    "recv_source_call_id": None,
+                    "result_id": None,
+                    "local_id": None,
+                    "local_fqn": None,
+                    "local_name": None,
+                    "local_line": None,
+                    "local_type_name": None,
+                }
+            ]
         )
         result = build_execution_flow(runner, "m:doWork")
         assert len(result) == 1
@@ -787,39 +894,43 @@ class TestBuildExecutionFlow:
 
     def test_arguments_populated_on_call_entry(self):
         runner = make_execution_data_runner(
-            calls=[{
-                "call_id": "call:1",
-                "call_kind": "method",
-                "call_name": "find",
-                "call_file": None,
-                "call_line": 5,
-                "callee_id": "m:find",
-                "callee_fqn": "App\\Repo::find",
-                "callee_kind": "Method",
-                "callee_name": "find",
-                "callee_signature": None,
-                "callee_file": None,
-                "callee_start_line": None,
-                "recv_id": None,
-                "recv_value_kind": None,
-                "recv_name": None,
-                "recv_source_call_id": None,
-                "result_id": None,
-                "local_id": None,
-                "local_fqn": None,
-                "local_name": None,
-                "local_line": None,
-                "local_type_name": None,
-            }],
-            arguments=[{
-                "call_id": "call:1",
-                "position": 0,
-                "expression": "$orderId",
-                "value_kind": "local",
-                "value_name": "$orderId",
-                "value_fqn": None,
-                "value_type": "int",
-            }]
+            calls=[
+                {
+                    "call_id": "call:1",
+                    "call_kind": "method",
+                    "call_name": "find",
+                    "call_file": None,
+                    "call_line": 5,
+                    "callee_id": "m:find",
+                    "callee_fqn": "App\\Repo::find",
+                    "callee_kind": "Method",
+                    "callee_name": "find",
+                    "callee_signature": None,
+                    "callee_file": None,
+                    "callee_start_line": None,
+                    "recv_id": None,
+                    "recv_value_kind": None,
+                    "recv_name": None,
+                    "recv_source_call_id": None,
+                    "result_id": None,
+                    "local_id": None,
+                    "local_fqn": None,
+                    "local_name": None,
+                    "local_line": None,
+                    "local_type_name": None,
+                }
+            ],
+            arguments=[
+                {
+                    "call_id": "call:1",
+                    "position": 0,
+                    "expression": "$orderId",
+                    "value_kind": "local",
+                    "value_name": "$orderId",
+                    "value_fqn": None,
+                    "value_type": "int",
+                }
+            ],
         )
         result = build_execution_flow(runner, "m:doWork")
         assert len(result) == 1
@@ -966,13 +1077,25 @@ class TestGetImplementationsForNode:
         node = make_class_node()
         runner = MagicMock()
         runner.execute.return_value = [
-            {"id": "cls:Child", "fqn": "App\\ChildClass", "kind": "Class",
-             "file": "src/Child.php", "start_line": 5, "signature": None}
+            {
+                "id": "cls:Child",
+                "fqn": "App\\ChildClass",
+                "kind": "Class",
+                "file": "src/Child.php",
+                "start_line": 5,
+                "signature": None,
+            }
         ]
         count = [0]
         result = get_implementations_for_node(
-            runner, node, depth=1, max_depth=3, limit=100,
-            visited=set(), count=count, shown_impl_for=set()
+            runner,
+            node,
+            depth=1,
+            max_depth=3,
+            limit=100,
+            visited=set(),
+            count=count,
+            shown_impl_for=set(),
         )
         assert len(result) == 1
         assert result[0].fqn == "App\\ChildClass"
@@ -984,27 +1107,46 @@ class TestGetImplementationsForNode:
 
         def execute_side_effect(query, **kwargs):
             from src.logic.polymorphic import (
-                _Q_DIRECT_OVERRIDES,
                 _Q_CONCRETE_IMPLEMENTORS_DIRECT,
                 _Q_CONCRETE_IMPLEMENTORS_TRANSITIVE,
+                _Q_DIRECT_OVERRIDES,
             )
+
             q = query.strip()
             if _Q_DIRECT_OVERRIDES.strip() in q or q in _Q_DIRECT_OVERRIDES.strip():
                 return [
-                    {"id": "m:override", "fqn": "App\\Child::doWork", "kind": "Method",
-                     "file": "src/Child.php", "start_line": 10, "signature": None}
+                    {
+                        "id": "m:override",
+                        "fqn": "App\\Child::doWork",
+                        "kind": "Method",
+                        "file": "src/Child.php",
+                        "start_line": 10,
+                        "signature": None,
+                    }
                 ]
-            if _Q_CONCRETE_IMPLEMENTORS_DIRECT.strip() in q or q in _Q_CONCRETE_IMPLEMENTORS_DIRECT.strip():
+            if (
+                _Q_CONCRETE_IMPLEMENTORS_DIRECT.strip() in q
+                or q in _Q_CONCRETE_IMPLEMENTORS_DIRECT.strip()
+            ):
                 return []
-            if _Q_CONCRETE_IMPLEMENTORS_TRANSITIVE.strip() in q or q in _Q_CONCRETE_IMPLEMENTORS_TRANSITIVE.strip():
+            if (
+                _Q_CONCRETE_IMPLEMENTORS_TRANSITIVE.strip() in q
+                or q in _Q_CONCRETE_IMPLEMENTORS_TRANSITIVE.strip()
+            ):
                 return []
             return []
 
         runner.execute.side_effect = execute_side_effect
         count = [0]
         result = get_implementations_for_node(
-            runner, node, depth=1, max_depth=3, limit=100,
-            visited=set(), count=count, shown_impl_for=set()
+            runner,
+            node,
+            depth=1,
+            max_depth=3,
+            limit=100,
+            visited=set(),
+            count=count,
+            shown_impl_for=set(),
         )
         assert len(result) == 1
         assert result[0].ref_type == "overrides"
@@ -1015,14 +1157,26 @@ class TestGetImplementationsForNode:
         node = make_class_node()
         runner = MagicMock()
         runner.execute.return_value = [
-            {"id": "cls:Child", "fqn": "App\\ChildClass", "kind": "Class",
-             "file": None, "start_line": None, "signature": None}
+            {
+                "id": "cls:Child",
+                "fqn": "App\\ChildClass",
+                "kind": "Class",
+                "file": None,
+                "start_line": None,
+                "signature": None,
+            }
         ]
         shown = {node.node_id}  # Already shown
         count = [0]
         result = get_implementations_for_node(
-            runner, node, depth=1, max_depth=3, limit=100,
-            visited=set(), count=count, shown_impl_for=shown
+            runner,
+            node,
+            depth=1,
+            max_depth=3,
+            limit=100,
+            visited=set(),
+            count=count,
+            shown_impl_for=shown,
         )
         assert result == []
         runner.execute.assert_not_called()
@@ -1031,14 +1185,26 @@ class TestGetImplementationsForNode:
         node = make_class_node()
         runner = MagicMock()
         runner.execute.return_value = [
-            {"id": f"cls:{i}", "fqn": f"App\\Child{i}", "kind": "Class",
-             "file": None, "start_line": None, "signature": None}
+            {
+                "id": f"cls:{i}",
+                "fqn": f"App\\Child{i}",
+                "kind": "Class",
+                "file": None,
+                "start_line": None,
+                "signature": None,
+            }
             for i in range(10)
         ]
         count = [100]  # Already at limit (count >= limit)
         result = get_implementations_for_node(
-            runner, node, depth=1, max_depth=3, limit=100,
-            visited=set(), count=count, shown_impl_for=set()
+            runner,
+            node,
+            depth=1,
+            max_depth=3,
+            limit=100,
+            visited=set(),
+            count=count,
+            shown_impl_for=set(),
         )
         assert result == []
 

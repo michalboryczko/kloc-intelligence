@@ -35,8 +35,10 @@ def schema_ensure():
     config = Neo4jConfig.from_env()
     with Neo4jConnection(config) as conn:
         result = ensure_schema(conn)
-        console.print(f"[green]Schema ensured:[/green] {result['constraints']} constraints, "
-                       f"{result['indexes']} indexes")
+        console.print(
+            f"[green]Schema ensured:[/green] {result['constraints']} constraints, "
+            f"{result['indexes']} indexes"
+        )
 
 
 @schema_app.command("reset")
@@ -50,8 +52,10 @@ def schema_reset():
     with Neo4jConnection(config) as conn:
         drop_all(conn)
         result = ensure_schema(conn)
-        console.print(f"[green]Schema reset:[/green] {result['constraints']} constraints, "
-                       f"{result['indexes']} indexes")
+        console.print(
+            f"[green]Schema reset:[/green] {result['constraints']} constraints, "
+            f"{result['indexes']} indexes"
+        )
 
 
 @schema_app.command("verify")
@@ -59,7 +63,7 @@ def schema_verify():
     """Verify schema state."""
     from .config import Neo4jConfig
     from .db.connection import Neo4jConnection
-    from .db.schema import verify_schema, get_node_count, get_edge_count
+    from .db.schema import get_edge_count, get_node_count, verify_schema
 
     config = Neo4jConfig.from_env()
     with Neo4jConnection(config) as conn:
@@ -85,10 +89,11 @@ def import_sot(
 ):
     """Import a sot.json file into Neo4j."""
     import time
+
     from .config import Neo4jConfig
     from .db.connection import Neo4jConnection
-    from .db.schema import ensure_schema, drop_all
-    from .db.importer import parse_sot, import_nodes, import_edges, validate_import
+    from .db.importer import import_edges, import_nodes, parse_sot, validate_import
+    from .db.schema import drop_all, ensure_schema
 
     config = Neo4jConfig.from_env()
     conn = Neo4jConnection(config)
@@ -135,8 +140,8 @@ def resolve(
 
     from .config import Neo4jConfig
     from .db.connection import Neo4jConnection
-    from .db.query_runner import QueryRunner
     from .db.queries.resolve import resolve_symbol as do_resolve
+    from .db.query_runner import QueryRunner
 
     config = Neo4jConfig.from_env()
     conn = Neo4jConnection(config)
@@ -191,8 +196,8 @@ def usages(
     from .db.connection import Neo4jConnection
     from .db.query_runner import QueryRunner
     from .orchestration.usages import run_usages
-    from .output.json_formatter import print_json as do_print_json
     from .output.console import print_usages_result
+    from .output.json_formatter import print_json as do_print_json
 
     config = Neo4jConfig.from_env()
     conn = Neo4jConnection(config)
@@ -202,7 +207,7 @@ def usages(
         result = run_usages(runner, query, depth=depth, limit=limit)
     except ValueError as e:
         console.print(f"[red]Error:[/red] {e}")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from e
 
     if output_json:
         do_print_json(result.to_dict())
@@ -224,8 +229,8 @@ def deps(
     from .db.connection import Neo4jConnection
     from .db.query_runner import QueryRunner
     from .orchestration.deps import run_deps
-    from .output.json_formatter import print_json as do_print_json
     from .output.console import print_deps_result
+    from .output.json_formatter import print_json as do_print_json
 
     config = Neo4jConfig.from_env()
     conn = Neo4jConnection(config)
@@ -235,7 +240,7 @@ def deps(
         result = run_deps(runner, query, depth=depth, limit=limit)
     except ValueError as e:
         console.print(f"[red]Error:[/red] {e}")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from e
 
     if output_json:
         do_print_json(result.to_dict())
@@ -255,8 +260,8 @@ def owners(
     from .db.connection import Neo4jConnection
     from .db.query_runner import QueryRunner
     from .orchestration.simple import run_owners
-    from .output.json_formatter import print_json as do_print_json
     from .output.console import print_owners_result
+    from .output.json_formatter import print_json as do_print_json
 
     config = Neo4jConfig.from_env()
     conn = Neo4jConnection(config)
@@ -266,7 +271,7 @@ def owners(
         result = run_owners(runner, query)
     except ValueError as e:
         console.print(f"[red]Error:[/red] {e}")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from e
 
     if output_json:
         do_print_json(result.to_dict())
@@ -279,7 +284,9 @@ def owners(
 @app.command()
 def inherit(
     query: str = typer.Argument(..., help="Symbol to find inheritance tree of"),
-    direction: str = typer.Option("up", "--direction", "-D", help="Direction: up (ancestors) or down (descendants)"),
+    direction: str = typer.Option(
+        "up", "--direction", "-D", help="Direction: up (ancestors) or down (descendants)"
+    ),
     depth: int = typer.Option(5, "--depth", "-d", help="Maximum BFS depth"),
     limit: int = typer.Option(100, "--limit", "-l", help="Maximum total results"),
     output_json: bool = typer.Option(False, "--json", "-j", help="Output as JSON"),
@@ -289,8 +296,8 @@ def inherit(
     from .db.connection import Neo4jConnection
     from .db.query_runner import QueryRunner
     from .orchestration.simple import run_inherit
-    from .output.json_formatter import print_json as do_print_json
     from .output.console import print_inherit_result
+    from .output.json_formatter import print_json as do_print_json
 
     config = Neo4jConfig.from_env()
     conn = Neo4jConnection(config)
@@ -300,7 +307,7 @@ def inherit(
         result = run_inherit(runner, query, direction=direction, depth=depth, limit=limit)
     except ValueError as e:
         console.print(f"[red]Error:[/red] {e}")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from e
 
     if output_json:
         do_print_json(result.to_dict())
@@ -323,11 +330,11 @@ def context(
     """Get bidirectional context: what uses a symbol and what it uses."""
     from .config import Neo4jConfig
     from .db.connection import Neo4jConnection
-    from .db.query_runner import QueryRunner
     from .db.queries.resolve import resolve_symbol as do_resolve
+    from .db.query_runner import QueryRunner
     from .orchestration.context import execute_context
+    from .output.console import context_tree_to_dict, print_context_tree
     from .output.json_formatter import print_json as do_print_json
-    from .output.console import print_context_tree, context_tree_to_dict
 
     config = Neo4jConfig.from_env()
     conn = Neo4jConnection(config)
@@ -341,14 +348,17 @@ def context(
 
     try:
         result = execute_context(
-            runner, symbol,
-            depth=depth, limit=limit,
-            include_impl=impl, direct_only=direct,
+            runner,
+            symbol,
+            depth=depth,
+            limit=limit,
+            include_impl=impl,
+            direct_only=direct,
             with_imports=with_imports,
         )
     except ValueError as e:
         console.print(f"[red]Error:[/red] {e}")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from e
 
     if output_json:
         do_print_json(context_tree_to_dict(result))
@@ -361,7 +371,9 @@ def context(
 @app.command()
 def overrides(
     query: str = typer.Argument(..., help="Method to find overrides for"),
-    direction: str = typer.Option("up", "--direction", "-D", help="Direction: up (parent) or down (children)"),
+    direction: str = typer.Option(
+        "up", "--direction", "-D", help="Direction: up (parent) or down (children)"
+    ),
     depth: int = typer.Option(5, "--depth", "-d", help="Maximum BFS depth"),
     limit: int = typer.Option(100, "--limit", "-l", help="Maximum total results"),
     output_json: bool = typer.Option(False, "--json", "-j", help="Output as JSON"),
@@ -371,8 +383,8 @@ def overrides(
     from .db.connection import Neo4jConnection
     from .db.query_runner import QueryRunner
     from .orchestration.simple import run_overrides
-    from .output.json_formatter import print_json as do_print_json
     from .output.console import print_overrides_result
+    from .output.json_formatter import print_json as do_print_json
 
     config = Neo4jConfig.from_env()
     conn = Neo4jConnection(config)
@@ -382,7 +394,7 @@ def overrides(
         result = run_overrides(runner, query, direction=direction, depth=depth, limit=limit)
     except ValueError as e:
         console.print(f"[red]Error:[/red] {e}")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from e
 
     if output_json:
         do_print_json(result.to_dict())
@@ -397,15 +409,16 @@ def _require_ai_deps():
     try:
         import haystack  # noqa: F401
         import qdrant_client  # noqa: F401
-    except ImportError:
+    except ImportError as exc:
         console.print("[red]AI features require additional dependencies.[/red]")
         console.print("Install with: uv sync --extra ai")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from exc
 
 
 def _setup_logging(debug: bool):
     """Configure logging for AI commands."""
     import logging
+
     level = logging.DEBUG if debug else logging.INFO
     logging.basicConfig(
         level=logging.WARNING,  # suppress third-party noise
@@ -413,7 +426,13 @@ def _setup_logging(debug: bool):
         datefmt="%H:%M:%S",
     )
     # Only show debug/info for our AI modules
-    for name in ("src.ai", "src.ai.enricher", "src.ai.source_reader", "src.ai.chunker", "src.ai.pipelines"):
+    for name in (
+        "src.ai",
+        "src.ai.enricher",
+        "src.ai.source_reader",
+        "src.ai.chunker",
+        "src.ai.pipelines",
+    ):
         logging.getLogger(name).setLevel(level)
 
 
@@ -431,11 +450,11 @@ def explain(
     _require_ai_deps()
     _setup_logging(debug)
     from .ai.config import AIConfig
+    from .ai.enricher import Enricher
     from .config import Neo4jConfig
     from .db.connection import Neo4jConnection
-    from .db.query_runner import QueryRunner
     from .db.queries.resolve import resolve_symbol as do_resolve
-    from .ai.enricher import Enricher
+    from .db.query_runner import QueryRunner
 
     neo4j_config = Neo4jConfig.from_env()
     ai_config = AIConfig.from_env()
@@ -452,7 +471,9 @@ def explain(
 
     node = candidates[0]
     if node.kind not in ("Class", "Method"):
-        console.print(f"[yellow]Explain is available for Class/Method nodes, got: {node.kind}[/yellow]")
+        console.print(
+            f"[yellow]Explain is available for Class/Method nodes, got: {node.kind}[/yellow]"
+        )
         raise typer.Exit(1)
 
     # Check for existing explanation
@@ -503,7 +524,9 @@ def explain(
 @app.command()
 def search(
     query: str = typer.Argument(..., help="Natural language search query"),
-    collection: str = typer.Option("both", "--collection", "-c", help="Search in: code, explain, both"),
+    collection: str = typer.Option(
+        "both", "--collection", "-c", help="Search in: code, explain, both"
+    ),
     limit: int = typer.Option(10, "--limit", "-l", help="Maximum results"),
     output_json: bool = typer.Option(False, "--json", "-j", help="Output as JSON"),
 ):
@@ -531,7 +554,7 @@ def search(
     if output_json:
         console.print(json_mod.dumps({"query": query, "hits": hits}, indent=2))
     else:
-        console.print(f"\n[bold]Search:[/bold] \"{query}\"\n")
+        console.print(f'\n[bold]Search:[/bold] "{query}"\n')
         if not hits:
             console.print("[yellow]No results found.[/yellow]")
         else:
@@ -563,15 +586,15 @@ def enrich(
     debug: bool = typer.Option(False, "--debug", help="Enable debug logging"),
 ):
     """Batch generate explanations and embeddings for all class/method nodes."""
-    from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn
+    from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn
 
     _require_ai_deps()
     _setup_logging(debug)
     from .ai.config import AIConfig
+    from .ai.enricher import Enricher
     from .config import Neo4jConfig
     from .db.connection import Neo4jConnection
     from .db.query_runner import QueryRunner
-    from .ai.enricher import Enricher
 
     neo4j_config = Neo4jConfig.from_env()
     ai_config = AIConfig.from_env()
@@ -610,12 +633,12 @@ def enrich(
             force=force, kinds=kind_list, batch_size=batch_size, callback=on_progress
         )
 
-    console.print(f"\n[green]Enrichment complete:[/green]")
+    console.print("\n[green]Enrichment complete:[/green]")
     console.print(f"  Processed: {result.processed}")
     console.print(f"  Skipped:   {result.skipped}")
     console.print(f"  Failed:    {result.failed}")
     if result.failed_nodes:
-        console.print(f"\n[yellow]Failed nodes:[/yellow]")
+        console.print("\n[yellow]Failed nodes:[/yellow]")
         for fqn in result.failed_nodes:
             console.print(f"  - {fqn}")
 
@@ -635,7 +658,7 @@ def enrich_flows(
     1-3 sentence abstract description optimized for business-vocabulary search queries.
     Stores the result on the :Flow node and embeds it into flow_explain_embeddings.
     """
-    from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn
+    from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn
 
     _require_ai_deps()
     _setup_logging(debug)
@@ -678,12 +701,12 @@ def enrich_flows(
 
         result = enricher.enrich_all_flows(force=force, callback=on_progress)
 
-    console.print(f"\n[green]Flow enrichment complete:[/green]")
+    console.print("\n[green]Flow enrichment complete:[/green]")
     console.print(f"  Processed: {result.processed}")
     console.print(f"  Skipped:   {result.skipped}")
     console.print(f"  Failed:    {result.failed}")
     if result.failed_flows:
-        console.print(f"\n[yellow]Failed flows:[/yellow]")
+        console.print("\n[yellow]Failed flows:[/yellow]")
         for fid in result.failed_flows:
             console.print(f"  - {fid}")
 
@@ -697,10 +720,10 @@ def enrich_status(
     """Show progress of enrichment (how many nodes enriched vs total)."""
     import json as json_mod
 
+    from .ai.enricher import Enricher
     from .config import Neo4jConfig
     from .db.connection import Neo4jConnection
     from .db.query_runner import QueryRunner
-    from .ai.enricher import Enricher
 
     neo4j_config = Neo4jConfig.from_env()
     conn = Neo4jConnection(neo4j_config)
@@ -708,6 +731,7 @@ def enrich_status(
 
     # Enricher.get_status() only queries Neo4j, no AI deps needed
     from .ai.config import AIConfig
+
     ai_config = AIConfig()
     enricher = Enricher(runner, ai_config)
     status = enricher.get_status()
@@ -744,20 +768,20 @@ def import_flows(
 ):
     """Import symfony-kloc.json flows into Neo4j as :Flow nodes with FLOW_ENTRY and FLOW_TRIGGERS edges.
 
-    Replaces all existing flows on each call and drops the legacy flow_* Qdrant collections.
+    Replaces all existing flows on each call.
     """
-    import os
     import time as time_mod
+
     from .config import Neo4jConfig
     from .db.connection import Neo4jConnection
-    from .db.schema import ensure_schema
-    from .db.flow_importer import load_symfony_kloc, parse_flows, import_flow_nodes, import_flow_edges, clear_flows
-
-    stale_qdrant_collections = (
-        "flow_business_embeddings",
-        "flow_technical_embeddings",
-        "flow_search_embeddings",
+    from .db.flow_importer import (
+        clear_flows,
+        import_flow_edges,
+        import_flow_nodes,
+        load_symfony_kloc,
+        parse_flows,
     )
+    from .db.schema import ensure_schema
 
     config = Neo4jConfig.from_env()
     conn = Neo4jConnection(config)
@@ -775,20 +799,6 @@ def import_flows(
         f"  Parsed {len(nodes)} flow nodes, {entry_count} FLOW_ENTRY edges, "
         f"{trigger_count} FLOW_TRIGGERS edges"
     )
-
-    try:
-        from qdrant_client import QdrantClient
-        qdrant_url = os.environ.get("QDRANT_URL", "http://localhost:6333")
-        qdrant_api_key = os.environ.get("QDRANT_API_KEY") or None
-        qdrant = QdrantClient(url=qdrant_url, api_key=qdrant_api_key)
-        for name in stale_qdrant_collections:
-            try:
-                qdrant.delete_collection(name)
-            except Exception:
-                pass
-        qdrant.close()
-    except Exception as exc:
-        console.print(f"[yellow]Skipping Qdrant flow_* cleanup: {exc}[/yellow]")
 
     console.print("Clearing existing flows...")
     clear_flows(conn)
@@ -809,7 +819,9 @@ def import_flows(
 @app.command()
 def flows(
     query: str = typer.Argument(None, help="Optional flow_id, partial match, or entry FQN"),
-    type_filter: str = typer.Option(None, "--type", "-t", help="Filter by type: http,message,event,cli (comma-separated)"),
+    type_filter: str = typer.Option(
+        None, "--type", "-t", help="Filter by type: http,message,event,cli (comma-separated)"
+    ),
     output_json: bool = typer.Option(False, "--json", "-j", help="Output as JSON"),
 ):
     """List or inspect application flows.
@@ -819,13 +831,14 @@ def flows(
     when the query partially matches multiple flows.
     """
     import json as json_mod
+
     from .config import Neo4jConfig
     from .db.connection import Neo4jConnection
     from .db.queries.flows import (
         VALID_FLOW_TYPES,
-        list_flows,
         find_flow,
         get_flow_detail,
+        list_flows,
     )
 
     config = Neo4jConfig.from_env()
@@ -905,13 +918,15 @@ def flows(
             loc = f"{loc}:{entry['start_line']}-{entry['end_line']}"
         console.print(f"[dim]entry:[/dim]   {entry['fqn']}  [dim]{loc}[/dim]")
         if flow["type"] == "http":
-            console.print(f"[dim]route:[/dim]   {flow.get('route','')} {' '.join(flow.get('http_methods',[]))}")
+            console.print(
+                f"[dim]route:[/dim]   {flow.get('route', '')} {' '.join(flow.get('http_methods', []))}"
+            )
         elif flow["type"] == "message":
-            console.print(f"[dim]message:[/dim] {flow.get('message_class','')}")
+            console.print(f"[dim]message:[/dim] {flow.get('message_class', '')}")
         elif flow["type"] == "event":
-            console.print(f"[dim]event:[/dim]   {flow.get('event_name','')}")
+            console.print(f"[dim]event:[/dim]   {flow.get('event_name', '')}")
         elif flow["type"] == "cli":
-            console.print(f"[dim]command:[/dim] {flow.get('command_name','')}")
+            console.print(f"[dim]command:[/dim] {flow.get('command_name', '')}")
         if flow.get("explanation"):
             console.print(f"\n[bold]Summary:[/bold] {flow['explanation']}")
             model = flow.get("explain_model", "")
@@ -920,11 +935,15 @@ def flows(
         if flow["triggers_out"]:
             console.print(f"\n[bold]Triggers out ({len(flow['triggers_out'])}):[/bold]")
             for t in flow["triggers_out"]:
-                console.print(f"  → [cyan]{t['trigger_type']}[/cyan] via [yellow]{t['via']}[/yellow] → {t['target_name']} [dim]({t['target_flow_id']})[/dim]")
+                console.print(
+                    f"  → [cyan]{t['trigger_type']}[/cyan] via [yellow]{t['via']}[/yellow] → {t['target_name']} [dim]({t['target_flow_id']})[/dim]"
+                )
         if flow["triggers_in"]:
             console.print(f"\n[bold]Triggers in ({len(flow['triggers_in'])}):[/bold]")
             for t in flow["triggers_in"]:
-                console.print(f"  ← [cyan]{t['trigger_type']}[/cyan] via [yellow]{t['via']}[/yellow] ← {t['source_name']} [dim]({t['source_flow_id']})[/dim]")
+                console.print(
+                    f"  ← [cyan]{t['trigger_type']}[/cyan] via [yellow]{t['via']}[/yellow] ← {t['source_name']} [dim]({t['source_flow_id']})[/dim]"
+                )
         if not flow["triggers_out"] and not flow["triggers_in"]:
             console.print("\n[dim](no triggers)[/dim]")
 
@@ -952,7 +971,9 @@ def source(
     if project_root:
         ai_config.project_root = project_root
     if not ai_config.project_root:
-        console.print("[red]project_root is required (use --project-root or KLOC_PROJECT_ROOT)[/red]")
+        console.print(
+            "[red]project_root is required (use --project-root or KLOC_PROJECT_ROOT)[/red]"
+        )
         raise typer.Exit(1)
 
     conn = Neo4jConnection(neo4j_config)
@@ -1026,7 +1047,9 @@ def chunks(
     if project_root:
         ai_config.project_root = project_root
     if not ai_config.project_root:
-        console.print("[red]project_root is required (use --project-root or KLOC_PROJECT_ROOT)[/red]")
+        console.print(
+            "[red]project_root is required (use --project-root or KLOC_PROJECT_ROOT)[/red]"
+        )
         raise typer.Exit(1)
 
     conn = Neo4jConnection(neo4j_config)
@@ -1099,7 +1122,9 @@ def chunks(
 @app.command("mcp-server")
 def mcp_server(
     database: str = typer.Option("neo4j", "--database", "-db", help="Neo4j database name"),
-    config: str = typer.Option(None, "--config", help="Path to config JSON with project->database mapping"),
+    config: str = typer.Option(
+        None, "--config", help="Path to config JSON with project->database mapping"
+    ),
 ):
     """Start MCP server for AI agent integration."""
     from .server.mcp import run_mcp_server

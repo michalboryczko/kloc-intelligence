@@ -20,6 +20,7 @@ from pathlib import Path
 import pytest
 
 from src.models.node import NodeData
+from src.models.output import ContextOutput
 from src.models.results import (
     ArgumentInfo,
     ContextEntry,
@@ -27,15 +28,12 @@ from src.models.results import (
     DefinitionInfo,
     MemberRef,
 )
-from src.models.output import ContextOutput
 
 # =========================================================================
 # Helpers
 # =========================================================================
 
-SCHEMA_PATH = (
-    Path(__file__).parent.parent.parent / "kloc-contracts" / "kloc-cli-context.json"
-)
+SCHEMA_PATH = Path(__file__).parent.parent.parent / "kloc-contracts" / "kloc-cli-context.json"
 
 
 def _load_schema() -> dict:
@@ -331,12 +329,28 @@ class TestContractNullFieldOmission:
         ub = d["usedBy"][0]
         # These optional fields should not be present
         for key in [
-            "signature", "refType", "callee", "on", "onKind",
-            "member_ref", "arguments", "args", "result_var",
-            "entry_type", "variable_name", "variable_symbol",
-            "variable_type", "source_call", "crossed_from",
-            "sites", "via", "property", "accessCount", "methodCount",
-            "implementations", "via_interface",
+            "signature",
+            "refType",
+            "callee",
+            "on",
+            "onKind",
+            "member_ref",
+            "arguments",
+            "args",
+            "result_var",
+            "entry_type",
+            "variable_name",
+            "variable_symbol",
+            "variable_type",
+            "source_call",
+            "crossed_from",
+            "sites",
+            "via",
+            "property",
+            "accessCount",
+            "methodCount",
+            "implementations",
+            "via_interface",
         ]:
             if key in ub:
                 assert ub[key] is not None, f"Field '{key}' is None, should be omitted"
@@ -349,10 +363,23 @@ class TestContractNullFieldOmission:
         d = ContextOutput.from_result(result).to_dict()
         defn = d["definition"]
         for key in [
-            "signature", "arguments", "returnType", "properties",
-            "methods", "extends", "implements", "uses_traits",
-            "constructorDeps", "type", "visibility", "promoted",
-            "readonly", "static", "value_kind", "source", "declaredIn",
+            "signature",
+            "arguments",
+            "returnType",
+            "properties",
+            "methods",
+            "extends",
+            "implements",
+            "uses_traits",
+            "constructorDeps",
+            "type",
+            "visibility",
+            "promoted",
+            "readonly",
+            "static",
+            "value_kind",
+            "source",
+            "declaredIn",
         ]:
             if key in defn:
                 assert defn[key] is not None, f"Definition field '{key}' is None"
@@ -488,6 +515,7 @@ class TestContractSchemaValidation:
     def _validate(self, data: dict, schema: dict):
         """Validate data against schema, raising on failure."""
         import jsonschema
+
         jsonschema.validate(instance=data, schema=schema)
 
     def test_minimal_output_validates(self, schema):

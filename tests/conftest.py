@@ -44,8 +44,8 @@ def neo4j_connection(neo4j_config: Neo4jConfig):
 
 def _load_test_dataset(conn):
     """Load the context-final test dataset into Neo4j."""
-    from src.db.schema import ensure_schema, drop_all
-    from src.db.importer import parse_sot, import_nodes, import_edges
+    from src.db.importer import import_edges, import_nodes, parse_sot
+    from src.db.schema import drop_all, ensure_schema
 
     sot_path = (
         Path(__file__).parent.parent.parent
@@ -67,6 +67,7 @@ def _load_test_dataset(conn):
 def _db_has_data(conn, expected_min: int = 1000) -> bool:
     """Check if the database still has data (not cleared by another test)."""
     from src.db.schema import get_node_count
+
     return get_node_count(conn) >= expected_min
 
 

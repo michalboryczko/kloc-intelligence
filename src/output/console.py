@@ -5,17 +5,17 @@ from rich.table import Table
 from rich.tree import Tree
 
 from ..models.results import (
-    UsagesTreeResult,
-    DepsTreeResult,
-    UsageEntry,
-    DepsEntry,
-    OwnersResult,
-    InheritTreeResult,
-    InheritEntry,
-    OverridesTreeResult,
-    OverrideEntry,
-    ContextResult,
     ContextEntry,
+    ContextResult,
+    DepsEntry,
+    DepsTreeResult,
+    InheritEntry,
+    InheritTreeResult,
+    OverrideEntry,
+    OverridesTreeResult,
+    OwnersResult,
+    UsageEntry,
+    UsagesTreeResult,
 )
 
 console = Console()
@@ -162,9 +162,7 @@ def print_owners_result(result: OwnersResult) -> None:
 def print_inherit_result(result: InheritTreeResult) -> None:
     """Print inherit result as a Rich tree."""
     direction_label = "ancestors" if result.direction == "up" else "descendants"
-    console.print(
-        f"[bold]Inheritance {direction_label} of[/bold] {result.root.fqn}"
-    )
+    console.print(f"[bold]Inheritance {direction_label} of[/bold] {result.root.fqn}")
     console.print(f"  defined at: {result.root.location_str}")
     console.print()
 
@@ -177,9 +175,7 @@ def print_inherit_result(result: InheritTreeResult) -> None:
     console.print(root)
 
 
-def _add_inherit_children(
-    parent: Tree, entries: list[InheritEntry]
-) -> None:
+def _add_inherit_children(parent: Tree, entries: list[InheritEntry]) -> None:
     """Recursively add inherit entries to a Rich tree."""
     for entry in entries:
         loc = _format_location(entry.file, entry.line)
@@ -194,12 +190,8 @@ def _add_inherit_children(
 
 def print_overrides_result(result: OverridesTreeResult) -> None:
     """Print overrides result as a Rich tree."""
-    direction_label = (
-        "overridden by" if result.direction == "down" else "overrides"
-    )
-    console.print(
-        f"[bold]Method {direction_label}[/bold] {result.root.fqn}"
-    )
+    direction_label = "overridden by" if result.direction == "down" else "overrides"
+    console.print(f"[bold]Method {direction_label}[/bold] {result.root.fqn}")
     console.print(f"  defined at: {result.root.location_str}")
     console.print()
 
@@ -212,9 +204,7 @@ def print_overrides_result(result: OverridesTreeResult) -> None:
     console.print(root)
 
 
-def _add_override_children(
-    parent: Tree, entries: list[OverrideEntry]
-) -> None:
+def _add_override_children(parent: Tree, entries: list[OverrideEntry]) -> None:
     """Recursively add override entries to a Rich tree."""
     for entry in entries:
         loc = _format_location(entry.file, entry.line)
@@ -259,8 +249,7 @@ def _format_argument_lines(arg, indent: str = "          ") -> str:
         for step in arg.source_chain:
             step_fqn = step.get("fqn", "?")
             step_ref = (
-                f" [cyan]\\[{step['reference_type']}][/cyan]"
-                if step.get("reference_type") else ""
+                f" [cyan]\\[{step['reference_type']}][/cyan]" if step.get("reference_type") else ""
             )
             line += f"\n{indent}    [dim]source:[/dim] {step_fqn}{step_ref}"
             if step.get("on"):
@@ -268,9 +257,7 @@ def _format_argument_lines(arg, indent: str = "          ") -> str:
                 if step.get("on_kind"):
                     on_text += f" [cyan]\\[{step['on_kind']}][/cyan]"
                 if step.get("on_file") and step.get("on_line") is not None:
-                    on_text += (
-                        f" [dim]({step['on_file']}:{step['on_line'] + 1})[/dim]"
-                    )
+                    on_text += f" [dim]({step['on_file']}:{step['on_line'] + 1})[/dim]"
                 line += f"\n{indent}        [dim]on:[/dim] [green]{on_text}[/green]"
 
     return line
@@ -300,9 +287,7 @@ def print_definition_section(result: ContextResult) -> None:
         source_name = defn.source.get("method_name", "unknown")
         source_line = defn.source.get("line")
         if source_line is not None:
-            console.print(
-                f"  [dim]Source:[/dim] {source_name} result (line {source_line + 1})"
-            )
+            console.print(f"  [dim]Source:[/dim] {source_name} result (line {source_line + 1})")
         else:
             console.print(f"  [dim]Source:[/dim] {source_name}")
 
@@ -321,9 +306,7 @@ def print_definition_section(result: ContextResult) -> None:
                 console.print(f"    {arg_name}")
 
     if defn.return_type and defn.kind not in ("Property",):
-        type_name = defn.return_type.get(
-            "name", defn.return_type.get("fqn", "?")
-        )
+        type_name = defn.return_type.get("name", defn.return_type.get("fqn", "?"))
         console.print(f"  [dim]Return type:[/dim] {type_name}")
 
     if defn.kind == "Property" and defn.return_type:
@@ -336,12 +319,8 @@ def print_definition_section(result: ContextResult) -> None:
         vis = rt.get("visibility")
         if vis:
             console.print(f"  [dim]Visibility:[/dim] {vis}")
-        console.print(
-            f"  [dim]Promoted:[/dim] {'yes' if rt.get('promoted') else 'no'}"
-        )
-        console.print(
-            f"  [dim]Readonly:[/dim] {'yes' if rt.get('readonly') else 'no'}"
-        )
+        console.print(f"  [dim]Promoted:[/dim] {'yes' if rt.get('promoted') else 'no'}")
+        console.print(f"  [dim]Readonly:[/dim] {'yes' if rt.get('readonly') else 'no'}")
         if rt.get("static"):
             console.print("  [dim]Static:[/dim] yes")
 
@@ -381,10 +360,7 @@ def print_definition_section(result: ContextResult) -> None:
         for method in defn.methods:
             sig = method.get("signature")
             tags = method.get("tags", [])
-            tag_str = (
-                f" [cyan]{''.join(f'[{t}]' for t in tags)}[/cyan]"
-                if tags else ""
-            )
+            tag_str = f" [cyan]{''.join(f'[{t}]' for t in tags)}[/cyan]" if tags else ""
             if sig:
                 console.print(f"    {sig}{tag_str}")
             else:
@@ -393,13 +369,9 @@ def print_definition_section(result: ContextResult) -> None:
     if defn.extends:
         console.print(f"  [dim]Extends:[/dim] {defn.extends}")
     if defn.implements:
-        console.print(
-            f"  [dim]Implements:[/dim] {', '.join(defn.implements)}"
-        )
+        console.print(f"  [dim]Implements:[/dim] {', '.join(defn.implements)}")
     if defn.uses_traits:
-        console.print(
-            f"  [dim]Uses traits:[/dim] {', '.join(defn.uses_traits)}"
-        )
+        console.print(f"  [dim]Uses traits:[/dim] {', '.join(defn.uses_traits)}")
 
     if defn.declared_in and defn.kind != "Value":
         declared_fqn = defn.declared_in.get("fqn", "?")
@@ -411,9 +383,7 @@ def print_definition_section(result: ContextResult) -> None:
             if declared_line is not None:
                 location += f":{declared_line + 1}"
             location += ")"
-        console.print(
-            f"  [dim]Defined in:[/dim] {declared_fqn}{location}"
-        )
+        console.print(f"  [dim]Defined in:[/dim] {declared_fqn}{location}")
     elif defn.file:
         location = defn.file
         if defn.line is not None:
@@ -434,10 +404,7 @@ def _add_context_children(
         # Handle via_interface entries
         if entry.via_interface:
             display_name = _format_entry_name(entry)
-            label = (
-                f"[bold magenta]<- via interface:[/bold magenta] "
-                f"{display_name}"
-            )
+            label = f"[bold magenta]<- via interface:[/bold magenta] {display_name}"
             if entry.file and entry.line is not None:
                 label += f" [dim]({entry.file}:{entry.line + 1})[/dim]"
             elif entry.file:
@@ -449,9 +416,7 @@ def _add_context_children(
 
         # Variable entry
         if entry.entry_type == "local_variable":
-            var_type_str = (
-                f" ({entry.variable_type})" if entry.variable_type else ""
-            )
+            var_type_str = f" ({entry.variable_type})" if entry.variable_type else ""
             label = (
                 f"[dim]\\[{entry.depth}][/dim] "
                 f"[bold green]{entry.variable_name}[/bold green]"
@@ -472,31 +437,18 @@ def _add_context_children(
                 if sc.member_ref and sc.member_ref.access_chain:
                     chain_text = sc.member_ref.access_chain
                     if sc.member_ref.access_chain_symbol:
-                        chain_text += (
-                            f" ({sc.member_ref.access_chain_symbol})"
-                        )
+                        chain_text += f" ({sc.member_ref.access_chain_symbol})"
                     if sc.member_ref.on_kind:
+                        chain_text += f" [cyan]\\[{sc.member_ref.on_kind}][/cyan]"
+                    if sc.member_ref.on_file and sc.member_ref.on_line is not None:
                         chain_text += (
-                            f" [cyan]\\[{sc.member_ref.on_kind}][/cyan]"
+                            f" [dim]({sc.member_ref.on_file}:{sc.member_ref.on_line + 1})[/dim]"
                         )
-                    if (
-                        sc.member_ref.on_file
-                        and sc.member_ref.on_line is not None
-                    ):
-                        chain_text += (
-                            f" [dim]({sc.member_ref.on_file}"
-                            f":{sc.member_ref.on_line + 1})[/dim]"
-                        )
-                    label += (
-                        f"\n          [dim]on:[/dim] "
-                        f"[green]{chain_text}[/green]"
-                    )
+                    label += f"\n          [dim]on:[/dim] [green]{chain_text}[/green]"
                 if sc.arguments:
                     label += "\n          [dim]args:[/dim]"
                     for arg in sc.arguments:
-                        label += _format_argument_lines(
-                            arg, indent="            "
-                        )
+                        label += _format_argument_lines(arg, indent="            ")
         else:
             # Call entry or type reference
             display_name = _format_entry_name(entry)
@@ -508,34 +460,19 @@ def _add_context_children(
                         f"[yellow]{entry.member_ref.target_name}[/yellow]"
                     )
                 if entry.member_ref.reference_type:
-                    label += (
-                        f" [cyan]\\[{entry.member_ref.reference_type}]"
-                        f"[/cyan]"
-                    )
-            if entry.property_name and not (
-                entry.member_ref and entry.member_ref.target_name
-            ):
-                label += (
-                    f" [bold yellow]->[/bold yellow] "
-                    f"[yellow]{entry.property_name}[/yellow]"
-                )
-            if entry.ref_type and not (
-                entry.member_ref and entry.member_ref.reference_type
-            ):
+                    label += f" [cyan]\\[{entry.member_ref.reference_type}][/cyan]"
+            if entry.property_name and not (entry.member_ref and entry.member_ref.target_name):
+                label += f" [bold yellow]->[/bold yellow] [yellow]{entry.property_name}[/yellow]"
+            if entry.ref_type and not (entry.member_ref and entry.member_ref.reference_type):
                 label += f" [cyan]\\[{entry.ref_type}][/cyan]"
-            if entry.callee and entry.ref_type == "method_call" and not (
-                entry.member_ref and entry.member_ref.target_name
+            if (
+                entry.callee
+                and entry.ref_type == "method_call"
+                and not (entry.member_ref and entry.member_ref.target_name)
             ):
-                label += (
-                    f" [bold yellow]->[/bold yellow] "
-                    f"[yellow]{entry.callee}[/yellow]"
-                )
+                label += f" [bold yellow]->[/bold yellow] [yellow]{entry.callee}[/yellow]"
             if entry.via:
-                via_short = (
-                    entry.via.rsplit("\\", 1)[-1]
-                    if "\\" in entry.via
-                    else entry.via
-                )
+                via_short = entry.via.rsplit("\\", 1)[-1] if "\\" in entry.via else entry.via
                 label += f" [magenta]<- via {via_short}[/magenta]"
             if entry.sites:
                 count = len(entry.sites)
@@ -546,70 +483,45 @@ def _add_context_children(
                 label += f" [dim]({entry.file}:{entry.line + 1})[/dim]"
             elif entry.file:
                 label += f" [dim]({entry.file})[/dim]"
-            if entry.on and not (
-                entry.member_ref and entry.member_ref.access_chain
-            ):
+            if entry.on and not (entry.member_ref and entry.member_ref.access_chain):
                 on_text = entry.on
                 if entry.on_kind:
                     on_text += f" [cyan]\\[{entry.on_kind}][/cyan]"
-                label += (
-                    f"\n        [dim]on:[/dim] [green]{on_text}[/green]"
-                )
+                label += f"\n        [dim]on:[/dim] [green]{on_text}[/green]"
             elif entry.member_ref and entry.member_ref.access_chain:
                 chain_text = entry.member_ref.access_chain
                 if entry.member_ref.access_chain_symbol:
-                    chain_text += (
-                        f" ({entry.member_ref.access_chain_symbol})"
-                    )
+                    chain_text += f" ({entry.member_ref.access_chain_symbol})"
                 if entry.member_ref.on_kind:
+                    chain_text += f" [cyan]\\[{entry.member_ref.on_kind}][/cyan]"
+                if entry.member_ref.on_file and entry.member_ref.on_line is not None:
                     chain_text += (
-                        f" [cyan]\\[{entry.member_ref.on_kind}][/cyan]"
+                        f" [dim]({entry.member_ref.on_file}:{entry.member_ref.on_line + 1})[/dim]"
                     )
-                if (
-                    entry.member_ref.on_file
-                    and entry.member_ref.on_line is not None
-                ):
-                    chain_text += (
-                        f" [dim]({entry.member_ref.on_file}"
-                        f":{entry.member_ref.on_line + 1})[/dim]"
-                    )
-                label += (
-                    f"\n        [dim]on:[/dim] [green]{chain_text}[/green]"
-                )
+                label += f"\n        [dim]on:[/dim] [green]{chain_text}[/green]"
             if entry.arguments:
                 label += "\n        [dim]args:[/dim]"
                 for arg in entry.arguments:
                     label += _format_argument_lines(arg, indent="          ")
             if entry.result_var:
-                label += (
-                    f"\n        [dim]result ->[/dim] "
-                    f"[green]{entry.result_var}[/green]"
-                )
+                label += f"\n        [dim]result ->[/dim] [green]{entry.result_var}[/green]"
 
         branch = parent.add(label)
 
         if entry.crossed_from:
-            branch.add(
-                f"[dim italic]crosses into {entry.crossed_from}[/dim italic]"
-            )
+            branch.add(f"[dim italic]crosses into {entry.crossed_from}[/dim italic]")
 
         if show_impl and entry.implementations:
             for impl in entry.implementations:
                 impl_display = _format_entry_name(impl)
-                impl_label = (
-                    f"[bold magenta]-> impl:[/bold magenta] {impl_display}"
-                )
+                impl_label = f"[bold magenta]-> impl:[/bold magenta] {impl_display}"
                 if impl.file and impl.line is not None:
-                    impl_label += (
-                        f" [dim]({impl.file}:{impl.line + 1})[/dim]"
-                    )
+                    impl_label += f" [dim]({impl.file}:{impl.line + 1})[/dim]"
                 elif impl.file:
                     impl_label += f" [dim]({impl.file})[/dim]"
                 impl_branch = branch.add(impl_label)
                 if impl.children:
-                    _add_context_children(
-                        impl_branch, impl.children, show_impl
-                    )
+                    _add_context_children(impl_branch, impl.children, show_impl)
 
         if entry.children:
             _add_context_children(branch, entry.children, show_impl)
@@ -623,9 +535,7 @@ def print_context_tree(result: ContextResult) -> None:
     target_display = result.target.display_name
 
     console.print(f"[bold]Context for {target_display}[/bold]")
-    console.print(
-        f"[dim]defined at: {result.target.location_str}[/dim]"
-    )
+    console.print(f"[dim]defined at: {result.target.location_str}[/dim]")
     console.print()
 
     if result.definition:
@@ -637,9 +547,7 @@ def print_context_tree(result: ContextResult) -> None:
         console.print("[dim]None[/dim]")
     else:
         used_by_root = Tree(f"[bold]{target_display}[/bold]")
-        _add_context_children(
-            used_by_root, result.used_by, show_impl=False
-        )
+        _add_context_children(used_by_root, result.used_by, show_impl=False)
         console.print(used_by_root)
 
     console.print()
@@ -650,9 +558,7 @@ def print_context_tree(result: ContextResult) -> None:
         console.print("[dim]None[/dim]")
     else:
         uses_root = Tree(f"[bold]{target_display}[/bold]")
-        _add_context_children(
-            uses_root, result.uses, show_impl=True
-        )
+        _add_context_children(uses_root, result.uses, show_impl=True)
         console.print(uses_root)
 
 

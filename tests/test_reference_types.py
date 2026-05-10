@@ -10,7 +10,6 @@ from src.logic.reference_types import (
     infer_reference_type,
 )
 
-
 # =============================================================================
 # Constants Tests
 # =============================================================================
@@ -24,7 +23,7 @@ class TestConstants:
 
     def test_chainable_contains_expected_types(self):
         expected = {"method_call", "property_access", "instantiation", "static_call", "caller"}
-        assert CHAINABLE_REFERENCE_TYPES == expected
+        assert expected == CHAINABLE_REFERENCE_TYPES
 
     def test_type_hint_not_chainable(self):
         assert "type_hint" not in CHAINABLE_REFERENCE_TYPES

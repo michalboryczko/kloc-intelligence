@@ -5,14 +5,14 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from src.db.query_runner import QueryRunner
 from src.models.node import NodeData
 from src.models.results import InheritEntry, InheritTreeResult
 from src.orchestration.simple import (
-    run_inherit,
-    run_inherit_by_id,
     _build_inherit_tree,
+    run_inherit,
 )
-from src.db.query_runner import QueryRunner
+
 from .conftest import requires_neo4j
 
 
@@ -42,15 +42,18 @@ def _mock_neighbor(node_id, fqn, kind="Class", file=None, start_line=None):
 
 def _reload_if_empty(conn):
     """Reload test data if the database was cleared by another test."""
+    from src.db.importer import import_edges, import_nodes, parse_sot
     from src.db.schema import ensure_schema
-    from src.db.importer import parse_sot, import_nodes, import_edges
 
     runner = QueryRunner(conn)
     count = runner.execute_count("MATCH (n:Node) RETURN count(n)")
     if count == 0:
         sot_path = (
             Path(__file__).parent.parent.parent
-            / "artifacts" / "kloc-dev" / "context-final" / "sot.json"
+            / "artifacts"
+            / "kloc-dev"
+            / "context-final"
+            / "sot.json"
         )
         ensure_schema(conn)
         nodes, edges = parse_sot(str(sot_path))
@@ -66,8 +69,10 @@ class TestInheritTreeUnit:
         runner = MagicMock(spec=QueryRunner)
         target = _make_node()
 
-        with patch("src.orchestration.simple.query_inherit_neighbors", return_value=[]), \
-             patch("src.orchestration.simple.fetch_node", return_value=target):
+        with (
+            patch("src.orchestration.simple.query_inherit_neighbors", return_value=[]),
+            patch("src.orchestration.simple.fetch_node", return_value=target),
+        ):
             result = _build_inherit_tree(runner, target, "up", depth=5, limit=100)
 
         assert result.root == target
@@ -79,11 +84,16 @@ class TestInheritTreeUnit:
         runner = MagicMock(spec=QueryRunner)
         target = _make_node()
         parent = _make_node(
-            node_id="parent-1", kind="Class", fqn="App\\BaseEntity",
-            file="src/BaseEntity.php", start_line=5,
+            node_id="parent-1",
+            kind="Class",
+            fqn="App\\BaseEntity",
+            file="src/BaseEntity.php",
+            start_line=5,
         )
 
-        neighbors = [_mock_neighbor("parent-1", "App\\BaseEntity", "Class", "src/BaseEntity.php", 5)]
+        neighbors = [
+            _mock_neighbor("parent-1", "App\\BaseEntity", "Class", "src/BaseEntity.php", 5)
+        ]
 
         call_count = [0]
 
@@ -94,8 +104,10 @@ class TestInheritTreeUnit:
                 return neighbors  # First call: target's neighbors
             return []  # Second call: parent's neighbors (none)
 
-        with patch("src.orchestration.simple.query_inherit_neighbors", side_effect=mock_neighbors), \
-             patch("src.orchestration.simple.fetch_node", return_value=parent):
+        with (
+            patch("src.orchestration.simple.query_inherit_neighbors", side_effect=mock_neighbors),
+            patch("src.orchestration.simple.fetch_node", return_value=parent),
+        ):
             result = _build_inherit_tree(runner, target, "up", depth=5, limit=100)
 
         assert len(result.tree) == 1
@@ -124,8 +136,10 @@ class TestInheritTreeUnit:
                 return node_c
             return None
 
-        with patch("src.orchestration.simple.query_inherit_neighbors", side_effect=mock_neighbors), \
-             patch("src.orchestration.simple.fetch_node", side_effect=mock_fetch):
+        with (
+            patch("src.orchestration.simple.query_inherit_neighbors", side_effect=mock_neighbors),
+            patch("src.orchestration.simple.fetch_node", side_effect=mock_fetch),
+        ):
             result = _build_inherit_tree(runner, target, "up", depth=5, limit=100)
 
         assert len(result.tree) == 1
@@ -148,8 +162,10 @@ class TestInheritTreeUnit:
                 return [_mock_neighbor("A", "A")]  # Cycle back to A
             return []
 
-        with patch("src.orchestration.simple.query_inherit_neighbors", side_effect=mock_neighbors), \
-             patch("src.orchestration.simple.fetch_node", return_value=node_b):
+        with (
+            patch("src.orchestration.simple.query_inherit_neighbors", side_effect=mock_neighbors),
+            patch("src.orchestration.simple.fetch_node", return_value=node_b),
+        ):
             result = _build_inherit_tree(runner, target, "up", depth=10, limit=100)
 
         # Only B should appear (A is already visited as root)
@@ -170,8 +186,10 @@ class TestInheritTreeUnit:
                 return [_mock_neighbor("C", "C")]  # Would be depth 2
             return []
 
-        with patch("src.orchestration.simple.query_inherit_neighbors", side_effect=mock_neighbors), \
-             patch("src.orchestration.simple.fetch_node", return_value=node_b):
+        with (
+            patch("src.orchestration.simple.query_inherit_neighbors", side_effect=mock_neighbors),
+            patch("src.orchestration.simple.fetch_node", return_value=node_b),
+        ):
             result = _build_inherit_tree(runner, target, "up", depth=1, limit=100)
 
         assert len(result.tree) == 1
@@ -199,8 +217,10 @@ class TestInheritTreeUnit:
             node_counter[0] += 1
             return _make_node(node_id=nid, fqn=nid)
 
-        with patch("src.orchestration.simple.query_inherit_neighbors", side_effect=mock_neighbors), \
-             patch("src.orchestration.simple.fetch_node", side_effect=mock_fetch):
+        with (
+            patch("src.orchestration.simple.query_inherit_neighbors", side_effect=mock_neighbors),
+            patch("src.orchestration.simple.fetch_node", side_effect=mock_fetch),
+        ):
             result = _build_inherit_tree(runner, target, "up", depth=5, limit=2)
 
         assert len(result.tree) <= 2
@@ -226,8 +246,10 @@ class TestInheritTreeUnit:
             fetch_count[0] += 1
             return _make_node(node_id=nid, fqn=nid, kind="Interface")
 
-        with patch("src.orchestration.simple.query_inherit_neighbors", side_effect=mock_neighbors), \
-             patch("src.orchestration.simple.fetch_node", side_effect=mock_fetch):
+        with (
+            patch("src.orchestration.simple.query_inherit_neighbors", side_effect=mock_neighbors),
+            patch("src.orchestration.simple.fetch_node", side_effect=mock_fetch),
+        ):
             result = _build_inherit_tree(runner, target, "up", depth=5, limit=100)
 
         assert len(result.tree) == 2
@@ -253,19 +275,6 @@ class TestRunInheritUnit:
             with pytest.raises(ValueError, match="Node must be Class/Interface/Trait/Enum"):
                 run_inherit(runner, "App\\SomeMethod")
 
-    def test_run_inherit_by_id_not_found(self):
-        runner = MagicMock(spec=QueryRunner)
-        with patch("src.orchestration.simple.fetch_node", return_value=None):
-            with pytest.raises(ValueError, match="Node not found"):
-                run_inherit_by_id(runner, "nonexistent-id")
-
-    def test_run_inherit_by_id_wrong_kind(self):
-        runner = MagicMock(spec=QueryRunner)
-        method = _make_node(kind="Method")
-        with patch("src.orchestration.simple.fetch_node", return_value=method):
-            with pytest.raises(ValueError, match="Node must be Class/Interface/Trait/Enum"):
-                run_inherit_by_id(runner, "method-1")
-
 
 class TestInheritToDict:
     """Test to_dict serialization for inherit output."""
@@ -273,8 +282,7 @@ class TestInheritToDict:
     def test_flat_result(self):
         target = _make_node()
         entries = [
-            InheritEntry(depth=1, node_id="p1", fqn="Parent", kind="Class",
-                         file="p.php", line=10),
+            InheritEntry(depth=1, node_id="p1", fqn="Parent", kind="Class", file="p.php", line=10),
         ]
         result = InheritTreeResult(root=target, direction="up", max_depth=5, tree=entries)
         d = result.to_dict()
@@ -286,10 +294,10 @@ class TestInheritToDict:
 
     def test_nested_result(self):
         target = _make_node()
-        child = InheritEntry(depth=2, node_id="gp1", fqn="GrandParent", kind="Class",
-                             file="gp.php", line=5)
-        parent = InheritEntry(depth=1, node_id="p1", fqn="Parent", kind="Class",
-                              children=[child])
+        child = InheritEntry(
+            depth=2, node_id="gp1", fqn="GrandParent", kind="Class", file="gp.php", line=5
+        )
+        parent = InheritEntry(depth=1, node_id="p1", fqn="Parent", kind="Class", children=[child])
         result = InheritTreeResult(root=target, direction="up", max_depth=5, tree=[parent])
         d = result.to_dict()
         assert d["tree"][0]["children"][0]["fqn"] == "GrandParent"

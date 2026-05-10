@@ -1,21 +1,18 @@
-"""Smoke test for the CLI command list after the flow demolition (AC-8).
+"""Smoke test for the CLI command list.
 
-Verifies:
-- `kloc --help` no longer lists `flow-diagram`, `explain-flow`, `enrich-flows`
-- `import-flows` IS still listed
+Verifies the post-flow-demolition surface: the legacy `flow-diagram` and
+`explain-flow` commands are gone, and `import-flows` is still present.
 """
 
 from typer.testing import CliRunner
 
 from src.cli import app
 
-
-REMOVED_COMMANDS = ["flow-diagram", "explain-flow", "enrich-flows"]
-KEPT_COMMAND = "import-flows"
+REMOVED_COMMANDS = ["flow-diagram", "explain-flow"]
+KEPT_COMMANDS = ["import-flows", "flows", "enrich-flows"]
 
 
 def test_kloc_help_does_not_list_removed_commands():
-    """AC-8: removed flow commands must not appear in --help; import-flows must remain."""
     runner = CliRunner()
     result = runner.invoke(app, ["--help"])
 
@@ -23,10 +20,7 @@ def test_kloc_help_does_not_list_removed_commands():
 
     output = result.output
     for cmd in REMOVED_COMMANDS:
-        assert cmd not in output, (
-            f"Removed command {cmd!r} still appears in `kloc --help` output"
-        )
+        assert cmd not in output, f"Removed command {cmd!r} still appears in `kloc --help` output"
 
-    assert KEPT_COMMAND in output, (
-        f"Expected command {KEPT_COMMAND!r} missing from `kloc --help` output"
-    )
+    for cmd in KEPT_COMMANDS:
+        assert cmd in output, f"Expected command {cmd!r} missing from `kloc --help` output"

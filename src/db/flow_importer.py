@@ -1,11 +1,9 @@
 """Import symfony-kloc.json flows into Neo4j as :Flow nodes with FLOW_ENTRY/FLOW_TRIGGERS edges.
 
-Reads the simple-shape symfony-kloc.json (top-level flows[] + triggers[]) and writes:
+Reads symfony-kloc.json (top-level ``flows[]`` + ``triggers[]``) and writes:
   - one :Flow node per app flow (MERGE on flow_id, idempotent within a single run)
   - one FLOW_ENTRY edge per flow with a resolvable method_node_id
   - one FLOW_TRIGGERS edge per (source, target) pair across all triggers[]
-
-NEVER writes FLOW_STEP edges. The chain[] field of legacy shapes is silently ignored.
 
 Idempotency across runs is provided by callers invoking clear_flows() before import.
 """
@@ -24,7 +22,7 @@ APP_NAMESPACE = "App\\"
 
 def load_symfony_kloc(path: str | Path) -> dict:
     """Load and parse a symfony-kloc.json file."""
-    with open(path, "r") as f:
+    with open(path) as f:
         return json.load(f)
 
 
@@ -55,15 +53,17 @@ def _derive_name(flow_type: str, entry: dict) -> str:
 
 
 def parse_flows(data: dict) -> tuple[list[dict], list[dict]]:
-    """Parse new-shape symfony-kloc.json into (flow_nodes, flow_edges).
+    """Parse symfony-kloc.json into (flow_nodes, flow_edges).
 
-    flow_edges items have type='flow_entry' or 'flow_triggers' only — no 'flow_step'.
+    flow_edges items have type='flow_entry' or 'flow_triggers'.
     """
     flows = data.get("flows", [])
     app_flows = [f for f in flows if _is_app_flow(f)]
     logger.info(
         "Parsing flows: %d total, %d app flows (filtered %d non-App)",
-        len(flows), len(app_flows), len(flows) - len(app_flows),
+        len(flows),
+        len(app_flows),
+        len(flows) - len(app_flows),
     )
 
     nodes: list[dict] = []
@@ -99,11 +99,13 @@ def parse_flows(data: dict) -> tuple[list[dict], list[dict]]:
 
         method_node_id = entry.get("method_node_id")
         if method_node_id:
-            edges.append({
-                "type": "flow_entry",
-                "source_flow_id": flow_id,
-                "target_node_id": method_node_id,
-            })
+            edges.append(
+                {
+                    "type": "flow_entry",
+                    "source_flow_id": flow_id,
+                    "target_node_id": method_node_id,
+                }
+            )
 
     for trigger in data.get("triggers", []):
         trigger_type = trigger.get("type", "")
@@ -118,13 +120,15 @@ def parse_flows(data: dict) -> tuple[list[dict], list[dict]]:
                 if not _is_app_flow_id(target_id):
                     logger.warning("Skipping non-App trigger target: %s", target_id)
                     continue
-                edges.append({
-                    "type": "flow_triggers",
-                    "source_flow_id": source_id,
-                    "target_flow_id": target_id,
-                    "trigger_type": trigger_type,
-                    "via": via,
-                })
+                edges.append(
+                    {
+                        "type": "flow_triggers",
+                        "source_flow_id": source_id,
+                        "target_flow_id": target_id,
+                        "trigger_type": trigger_type,
+                        "via": via,
+                    }
+                )
 
     return nodes, edges
 
@@ -134,14 +138,10 @@ def import_flow_nodes(connection: Neo4jConnection, nodes: list[dict]) -> int:
     if not nodes:
         return 0
 
-    query = (
-        "UNWIND $batch AS props "
-        "MERGE (f:Flow {flow_id: props.flow_id}) "
-        "SET f += props"
-    )
+    query = "UNWIND $batch AS props MERGE (f:Flow {flow_id: props.flow_id}) SET f += props"
     total = 0
     for i in range(0, len(nodes), BATCH_SIZE):
-        batch = nodes[i:i + BATCH_SIZE]
+        batch = nodes[i : i + BATCH_SIZE]
         with connection.session() as session:
             session.run(query, batch=batch)
         total += len(batch)
@@ -178,7 +178,8 @@ def import_flow_edges(connection: Neo4jConnection, edges: list[dict]) -> int:
             else:
                 logger.warning(
                     "FLOW_ENTRY skipped: no :Node with node_id=%s for flow=%s",
-                    node_id, flow_id,
+                    node_id,
+                    flow_id,
                 )
 
     for edge in by_type.get("flow_triggers", []):
@@ -204,7 +205,8 @@ def import_flow_edges(connection: Neo4jConnection, edges: list[dict]) -> int:
             else:
                 logger.warning(
                     "FLOW_TRIGGERS skipped: missing flow source=%s or target=%s",
-                    source_id, target_id,
+                    source_id,
+                    target_id,
                 )
 
     logger.info("Imported %d Flow edges", total)

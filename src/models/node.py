@@ -1,7 +1,6 @@
 """Node data model for kloc-intelligence."""
 
 from dataclasses import dataclass, field
-from typing import Optional
 
 
 @dataclass
@@ -13,20 +12,20 @@ class NodeData:
     name: str
     fqn: str
     symbol: str
-    file: Optional[str] = None
-    start_line: Optional[int] = None
-    start_col: Optional[int] = None
-    end_line: Optional[int] = None
-    end_col: Optional[int] = None
+    file: str | None = None
+    start_line: int | None = None
+    start_col: int | None = None
+    end_line: int | None = None
+    end_col: int | None = None
     documentation: list[str] = field(default_factory=list)
-    value_kind: Optional[str] = None
-    type_symbol: Optional[str] = None
-    call_kind: Optional[str] = None
-    signature: Optional[str] = None
-    enclosing_start_line: Optional[int] = None
-    enclosing_start_col: Optional[int] = None
-    enclosing_end_line: Optional[int] = None
-    enclosing_end_col: Optional[int] = None
+    value_kind: str | None = None
+    type_symbol: str | None = None
+    call_kind: str | None = None
+    signature: str | None = None
+    enclosing_start_line: int | None = None
+    enclosing_start_col: int | None = None
+    enclosing_end_line: int | None = None
+    enclosing_end_col: int | None = None
 
     @property
     def id(self) -> str:

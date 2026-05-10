@@ -15,18 +15,17 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
+from src.logic.handlers import EntryBucket
 from src.models.node import NodeData
 from src.models.results import ContextEntry
 from src.orchestration.class_context import (
+    USES_PRIORITY,
+    _build_property_access_entries,
+    _dict_to_context_entry,
+    build_caller_chain_for_method,
     build_class_used_by,
     build_class_uses,
-    build_caller_chain_for_method,
-    _dict_to_context_entry,
-    _build_property_access_entries,
-    USES_PRIORITY,
 )
-from src.logic.handlers import EntryBucket
-
 
 # =============================================================================
 # Fixtures / Factories
@@ -391,8 +390,14 @@ class TestBuildClassUsedByEmpty:
         node = make_node()
         data = _default_used_by_data(
             extends_children=[
-                {"id": "c:1", "fqn": "App\\Child", "kind": "Class",
-                 "file": "Child.php", "start_line": 5, "rel_type": "EXTENDS"}
+                {
+                    "id": "c:1",
+                    "fqn": "App\\Child",
+                    "kind": "Class",
+                    "file": "Child.php",
+                    "start_line": 5,
+                    "rel_type": "EXTENDS",
+                }
             ]
         )
         with _patch_fetch_used_by(data):
@@ -408,8 +413,14 @@ class TestBuildClassUsedByExtends:
         node = make_node()
         data = _default_used_by_data(
             extends_children=[
-                {"id": "c:child", "fqn": "App\\SpecialOrder", "kind": "Class",
-                 "file": "src/SpecialOrder.php", "start_line": 3, "rel_type": "EXTENDS"}
+                {
+                    "id": "c:child",
+                    "fqn": "App\\SpecialOrder",
+                    "kind": "Class",
+                    "file": "src/SpecialOrder.php",
+                    "start_line": 3,
+                    "rel_type": "EXTENDS",
+                }
             ]
         )
         with _patch_fetch_used_by(data):
@@ -426,8 +437,14 @@ class TestBuildClassUsedByExtends:
         node = make_node()
         data = _default_used_by_data(
             extends_children=[
-                {"id": "c:impl", "fqn": "App\\ConcreteRepo", "kind": "Class",
-                 "file": "src/Repo.php", "start_line": 1, "rel_type": "IMPLEMENTS"}
+                {
+                    "id": "c:impl",
+                    "fqn": "App\\ConcreteRepo",
+                    "kind": "Class",
+                    "file": "src/Repo.php",
+                    "start_line": 1,
+                    "rel_type": "IMPLEMENTS",
+                }
             ]
         )
         with _patch_fetch_used_by(data):
@@ -439,10 +456,22 @@ class TestBuildClassUsedByExtends:
         node = make_node()
         data = _default_used_by_data(
             extends_children=[
-                {"id": "c:1", "fqn": "App\\A", "kind": "Class",
-                 "file": "A.php", "start_line": 1, "rel_type": "EXTENDS"},
-                {"id": "c:2", "fqn": "App\\B", "kind": "Class",
-                 "file": "B.php", "start_line": 1, "rel_type": "IMPLEMENTS"},
+                {
+                    "id": "c:1",
+                    "fqn": "App\\A",
+                    "kind": "Class",
+                    "file": "A.php",
+                    "start_line": 1,
+                    "rel_type": "EXTENDS",
+                },
+                {
+                    "id": "c:2",
+                    "fqn": "App\\B",
+                    "kind": "Class",
+                    "file": "B.php",
+                    "start_line": 1,
+                    "rel_type": "IMPLEMENTS",
+                },
             ]
         )
         with _patch_fetch_used_by(data):
@@ -455,8 +484,14 @@ class TestBuildClassUsedByExtends:
         node = make_node()
         data = _default_used_by_data(
             extends_children=[
-                {"id": "c:ext", "fqn": "App\\Child", "kind": "Class",
-                 "file": "Child.php", "start_line": 1, "rel_type": "EXTENDS"}
+                {
+                    "id": "c:ext",
+                    "fqn": "App\\Child",
+                    "kind": "Class",
+                    "file": "Child.php",
+                    "start_line": 1,
+                    "rel_type": "EXTENDS",
+                }
             ],
             incoming_usages=[
                 {
@@ -684,8 +719,14 @@ class TestBuildClassUsedByHandlerDispatch:
         node = make_node()
         # Create many extends children
         children = [
-            {"id": f"c:{i}", "fqn": f"App\\Child{i}", "kind": "Class",
-             "file": "Child.php", "start_line": i, "rel_type": "EXTENDS"}
+            {
+                "id": f"c:{i}",
+                "fqn": f"App\\Child{i}",
+                "kind": "Class",
+                "file": "Child.php",
+                "start_line": i,
+                "rel_type": "EXTENDS",
+            }
             for i in range(20)
         ]
         data = _default_used_by_data(extends_children=children)
@@ -698,8 +739,14 @@ class TestBuildClassUsedByHandlerDispatch:
         node = make_node()
         data = _default_used_by_data(
             extends_children=[
-                {"id": "c:1", "fqn": "App\\Child", "kind": "Class",
-                 "file": "Child.php", "start_line": 1, "rel_type": "EXTENDS"}
+                {
+                    "id": "c:1",
+                    "fqn": "App\\Child",
+                    "kind": "Class",
+                    "file": "Child.php",
+                    "start_line": 1,
+                    "rel_type": "EXTENDS",
+                }
             ]
         )
         with _patch_fetch_used_by(data):
@@ -900,9 +947,14 @@ class TestBuildClassUsesStructural:
         node = make_node()
         data = _default_uses_data(
             class_rel=[
-                {"target_id": "c:base", "target_fqn": "App\\BaseOrder",
-                 "target_kind": "Class", "rel_type": "EXTENDS",
-                 "file": "BaseOrder.php", "line": 5}
+                {
+                    "target_id": "c:base",
+                    "target_fqn": "App\\BaseOrder",
+                    "target_kind": "Class",
+                    "rel_type": "EXTENDS",
+                    "file": "BaseOrder.php",
+                    "line": 5,
+                }
             ]
         )
         with _patch_fetch_uses(data):
@@ -916,9 +968,14 @@ class TestBuildClassUsesStructural:
         node = make_node()
         data = _default_uses_data(
             class_rel=[
-                {"target_id": "i:countable", "target_fqn": "Countable",
-                 "target_kind": "Interface", "rel_type": "IMPLEMENTS",
-                 "file": None, "line": None}
+                {
+                    "target_id": "i:countable",
+                    "target_fqn": "Countable",
+                    "target_kind": "Interface",
+                    "rel_type": "IMPLEMENTS",
+                    "file": None,
+                    "line": None,
+                }
             ]
         )
         with _patch_fetch_uses(data):
@@ -930,9 +987,14 @@ class TestBuildClassUsesStructural:
         node = make_node()
         data = _default_uses_data(
             class_rel=[
-                {"target_id": "t:trait", "target_fqn": "App\\Traits\\HasTimestamps",
-                 "target_kind": "Trait", "rel_type": "USES_TRAIT",
-                 "file": "HasTimestamps.php", "line": 1}
+                {
+                    "target_id": "t:trait",
+                    "target_fqn": "App\\Traits\\HasTimestamps",
+                    "target_kind": "Trait",
+                    "rel_type": "USES_TRAIT",
+                    "file": "HasTimestamps.php",
+                    "line": 1,
+                }
             ]
         )
         with _patch_fetch_uses(data):
@@ -946,15 +1008,30 @@ class TestBuildClassUsesStructural:
         node = make_node()
         data = _default_uses_data(
             class_rel=[
-                {"target_id": "t:trait", "target_fqn": "App\\T",
-                 "target_kind": "Trait", "rel_type": "USES_TRAIT",
-                 "file": None, "line": None},
-                {"target_id": "i:iface", "target_fqn": "App\\I",
-                 "target_kind": "Interface", "rel_type": "IMPLEMENTS",
-                 "file": None, "line": None},
-                {"target_id": "c:base", "target_fqn": "App\\B",
-                 "target_kind": "Class", "rel_type": "EXTENDS",
-                 "file": None, "line": None},
+                {
+                    "target_id": "t:trait",
+                    "target_fqn": "App\\T",
+                    "target_kind": "Trait",
+                    "rel_type": "USES_TRAIT",
+                    "file": None,
+                    "line": None,
+                },
+                {
+                    "target_id": "i:iface",
+                    "target_fqn": "App\\I",
+                    "target_kind": "Interface",
+                    "rel_type": "IMPLEMENTS",
+                    "file": None,
+                    "line": None,
+                },
+                {
+                    "target_id": "c:base",
+                    "target_fqn": "App\\B",
+                    "target_kind": "Class",
+                    "rel_type": "EXTENDS",
+                    "file": None,
+                    "line": None,
+                },
             ]
         )
         with _patch_fetch_uses(data):
@@ -962,7 +1039,9 @@ class TestBuildClassUsesStructural:
         ref_types = {e.ref_type for e in result}
         assert ref_types == {"extends", "implements", "uses_trait"}
         # All structural types share the same priority
-        assert USES_PRIORITY["extends"] == USES_PRIORITY["implements"] == USES_PRIORITY["uses_trait"]
+        assert (
+            USES_PRIORITY["extends"] == USES_PRIORITY["implements"] == USES_PRIORITY["uses_trait"]
+        )
 
 
 class TestBuildClassUsesExclusionSet:
@@ -974,16 +1053,30 @@ class TestBuildClassUsesExclusionSet:
         node = make_node()
         data = _default_uses_data(
             class_rel=[
-                {"target_id": "c:base", "target_fqn": "App\\BaseOrder",
-                 "target_kind": "Class", "rel_type": "EXTENDS",
-                 "file": None, "line": None}
+                {
+                    "target_id": "c:base",
+                    "target_fqn": "App\\BaseOrder",
+                    "target_kind": "Class",
+                    "rel_type": "EXTENDS",
+                    "file": None,
+                    "line": None,
+                }
             ],
             member_deps=[
                 # Member also uses the base class — should be excluded
-                {"member_id": "m:1", "member_fqn": "App\\Order::m", "member_kind": "Method",
-                 "member_name": "m", "target_id": "c:base", "target_fqn": "App\\BaseOrder",
-                 "target_kind": "Class", "target_name": "BaseOrder",
-                 "edge_type": "USES", "file": "Order.php", "line": 10}
+                {
+                    "member_id": "m:1",
+                    "member_fqn": "App\\Order::m",
+                    "member_kind": "Method",
+                    "member_name": "m",
+                    "target_id": "c:base",
+                    "target_fqn": "App\\BaseOrder",
+                    "target_kind": "Class",
+                    "target_name": "BaseOrder",
+                    "edge_type": "USES",
+                    "file": "Order.php",
+                    "line": 10,
+                }
             ],
         )
         with _patch_fetch_uses(data):
@@ -1001,10 +1094,19 @@ class TestBuildClassUsesMemberDeps:
         node = make_node()
         data = _default_uses_data(
             member_deps=[
-                {"member_id": "m:1", "member_fqn": "App\\Order::m", "member_kind": "Method",
-                 "member_name": "m", "target_id": "m:save", "target_fqn": "App\\Repo::save",
-                 "target_kind": "Method", "target_name": "save",
-                 "edge_type": "USES", "file": "Order.php", "line": 20}
+                {
+                    "member_id": "m:1",
+                    "member_fqn": "App\\Order::m",
+                    "member_kind": "Method",
+                    "member_name": "m",
+                    "target_id": "m:save",
+                    "target_fqn": "App\\Repo::save",
+                    "target_kind": "Method",
+                    "target_name": "save",
+                    "edge_type": "USES",
+                    "file": "Order.php",
+                    "line": 20,
+                }
             ],
         )
         with _patch_fetch_uses(data):
@@ -1018,14 +1120,32 @@ class TestBuildClassUsesMemberDeps:
         node = make_node()
         data = _default_uses_data(
             member_deps=[
-                {"member_id": "m:1", "member_fqn": "App\\Order::m1", "member_kind": "Method",
-                 "member_name": "m1", "target_id": "m:save", "target_fqn": "App\\Repo::save",
-                 "target_kind": "Method", "target_name": "save",
-                 "edge_type": "USES", "file": "Order.php", "line": 10},
-                {"member_id": "m:2", "member_fqn": "App\\Order::m2", "member_kind": "Method",
-                 "member_name": "m2", "target_id": "m:save", "target_fqn": "App\\Repo::save",
-                 "target_kind": "Method", "target_name": "save",
-                 "edge_type": "USES", "file": "Order.php", "line": 20},
+                {
+                    "member_id": "m:1",
+                    "member_fqn": "App\\Order::m1",
+                    "member_kind": "Method",
+                    "member_name": "m1",
+                    "target_id": "m:save",
+                    "target_fqn": "App\\Repo::save",
+                    "target_kind": "Method",
+                    "target_name": "save",
+                    "edge_type": "USES",
+                    "file": "Order.php",
+                    "line": 10,
+                },
+                {
+                    "member_id": "m:2",
+                    "member_fqn": "App\\Order::m2",
+                    "member_kind": "Method",
+                    "member_name": "m2",
+                    "target_id": "m:save",
+                    "target_fqn": "App\\Repo::save",
+                    "target_kind": "Method",
+                    "target_name": "save",
+                    "edge_type": "USES",
+                    "file": "Order.php",
+                    "line": 20,
+                },
             ],
         )
         with _patch_fetch_uses(data):
@@ -1047,15 +1167,33 @@ class TestBuildClassUsesMemberDeps:
         data = _default_uses_data(
             member_deps=[
                 # First access: method on dep class (resolves via execute_single)
-                {"member_id": "m:1", "member_fqn": "App\\Order::a", "member_kind": "Method",
-                 "member_name": "a", "target_id": "m:dep_method", "target_fqn": "App\\Dep::depMethod",
-                 "target_kind": "Method", "target_name": "depMethod",
-                 "edge_type": "USES", "file": "Order.php", "line": 10},
+                {
+                    "member_id": "m:1",
+                    "member_fqn": "App\\Order::a",
+                    "member_kind": "Method",
+                    "member_name": "a",
+                    "target_id": "m:dep_method",
+                    "target_fqn": "App\\Dep::depMethod",
+                    "target_kind": "Method",
+                    "target_name": "depMethod",
+                    "edge_type": "USES",
+                    "file": "Order.php",
+                    "line": 10,
+                },
                 # Second access: Class target directly (type_hint)
-                {"member_id": "prop:1", "member_fqn": "App\\Order::$dep", "member_kind": "Property",
-                 "member_name": "$dep", "target_id": "class:dep", "target_fqn": "App\\Dep",
-                 "target_kind": "Class", "target_name": "Dep",
-                 "edge_type": "USES", "file": "Order.php", "line": 5},
+                {
+                    "member_id": "prop:1",
+                    "member_fqn": "App\\Order::$dep",
+                    "member_kind": "Property",
+                    "member_name": "$dep",
+                    "target_id": "class:dep",
+                    "target_fqn": "App\\Dep",
+                    "target_kind": "Class",
+                    "target_name": "Dep",
+                    "edge_type": "USES",
+                    "file": "Order.php",
+                    "line": 5,
+                },
             ],
         )
         with _patch_fetch_uses(data):
@@ -1075,18 +1213,37 @@ class TestBuildClassUsesMemberDeps:
         node = make_node()
         data = _default_uses_data(
             class_rel=[
-                {"target_id": "t:trait", "target_fqn": "App\\T",
-                 "target_kind": "Trait", "rel_type": "USES_TRAIT",
-                 "file": None, "line": None},
-                {"target_id": "c:base", "target_fqn": "App\\B",
-                 "target_kind": "Class", "rel_type": "EXTENDS",
-                 "file": None, "line": None},
+                {
+                    "target_id": "t:trait",
+                    "target_fqn": "App\\T",
+                    "target_kind": "Trait",
+                    "rel_type": "USES_TRAIT",
+                    "file": None,
+                    "line": None,
+                },
+                {
+                    "target_id": "c:base",
+                    "target_fqn": "App\\B",
+                    "target_kind": "Class",
+                    "rel_type": "EXTENDS",
+                    "file": None,
+                    "line": None,
+                },
             ],
             member_deps=[
-                {"member_id": "m:1", "member_fqn": "App\\Order::m", "member_kind": "Method",
-                 "member_name": "m", "target_id": "m:save", "target_fqn": "App\\Repo::save",
-                 "target_kind": "Method", "target_name": "save",
-                 "edge_type": "USES", "file": "Order.php", "line": 10},
+                {
+                    "member_id": "m:1",
+                    "member_fqn": "App\\Order::m",
+                    "member_kind": "Method",
+                    "member_name": "m",
+                    "target_id": "m:save",
+                    "target_fqn": "App\\Repo::save",
+                    "target_kind": "Method",
+                    "target_name": "save",
+                    "edge_type": "USES",
+                    "file": "Order.php",
+                    "line": 10,
+                },
             ],
         )
         with _patch_fetch_uses(data):
@@ -1104,11 +1261,19 @@ class TestBuildClassUsesMemberDeps:
         node = make_node()
         data = _default_uses_data(
             member_deps=[
-                {"member_id": f"m:{i}", "member_fqn": f"App\\Order::m{i}",
-                 "member_kind": "Method", "member_name": f"m{i}",
-                 "target_id": f"class:{i}", "target_fqn": f"App\\Dep{i}",
-                 "target_kind": "Class", "target_name": f"Dep{i}",
-                 "edge_type": "USES", "file": "Order.php", "line": i}
+                {
+                    "member_id": f"m:{i}",
+                    "member_fqn": f"App\\Order::m{i}",
+                    "member_kind": "Method",
+                    "member_name": f"m{i}",
+                    "target_id": f"class:{i}",
+                    "target_fqn": f"App\\Dep{i}",
+                    "target_kind": "Class",
+                    "target_name": f"Dep{i}",
+                    "edge_type": "USES",
+                    "file": "Order.php",
+                    "line": i,
+                }
                 for i in range(30)
             ],
         )
@@ -1126,11 +1291,19 @@ class TestBuildClassUsesBehavioralDepth2:
         node = make_node()
         data = _default_uses_data(
             member_deps=[
-                {"member_id": "prop:repo", "member_fqn": "App\\Order::$repo",
-                 "member_kind": "Property", "member_name": "$repo",
-                 "target_id": "class:Repo", "target_fqn": "App\\Repo",
-                 "target_kind": "Class", "target_name": "Repo",
-                 "edge_type": "USES", "file": "Order.php", "line": 5},
+                {
+                    "member_id": "prop:repo",
+                    "member_fqn": "App\\Order::$repo",
+                    "member_kind": "Property",
+                    "member_name": "$repo",
+                    "target_id": "class:Repo",
+                    "target_fqn": "App\\Repo",
+                    "target_kind": "Class",
+                    "target_name": "Repo",
+                    "edge_type": "USES",
+                    "file": "Order.php",
+                    "line": 5,
+                },
             ],
         )
         runner.execute.return_value = [
@@ -1157,11 +1330,19 @@ class TestBuildClassUsesBehavioralDepth2:
         node = make_node()
         data = _default_uses_data(
             member_deps=[
-                {"member_id": "prop:repo", "member_fqn": "App\\Order::$repo",
-                 "member_kind": "Property", "member_name": "$repo",
-                 "target_id": "class:Repo", "target_fqn": "App\\Repo",
-                 "target_kind": "Class", "target_name": "Repo",
-                 "edge_type": "USES", "file": "Order.php", "line": 5},
+                {
+                    "member_id": "prop:repo",
+                    "member_fqn": "App\\Order::$repo",
+                    "member_kind": "Property",
+                    "member_name": "$repo",
+                    "target_id": "class:Repo",
+                    "target_fqn": "App\\Repo",
+                    "target_kind": "Class",
+                    "target_name": "Repo",
+                    "edge_type": "USES",
+                    "file": "Order.php",
+                    "line": 5,
+                },
             ],
         )
         with _patch_fetch_uses(data):
@@ -1179,20 +1360,36 @@ class TestBuildClassUsesBehavioralDepth2:
         node = make_node()
         data = _default_uses_data(
             member_deps=[
-                {"member_id": "prop:repo", "member_fqn": "App\\Order::$repo",
-                 "member_kind": "Property", "member_name": "$repo",
-                 "target_id": "class:Repo", "target_fqn": "App\\Repo",
-                 "target_kind": "Class", "target_name": "Repo",
-                 "edge_type": "USES", "file": "Order.php", "line": 5},
+                {
+                    "member_id": "prop:repo",
+                    "member_fqn": "App\\Order::$repo",
+                    "member_kind": "Property",
+                    "member_name": "$repo",
+                    "target_id": "class:Repo",
+                    "target_fqn": "App\\Repo",
+                    "target_kind": "Class",
+                    "target_name": "Repo",
+                    "edge_type": "USES",
+                    "file": "Order.php",
+                    "line": 5,
+                },
             ],
         )
         runner.execute.return_value = [
-            {"callee_id": "m:save", "callee_fqn": "App\\Repo::save",
-             "callee_kind": "Method", "callee_name": "save",
-             "from_method": "App\\Order::create"},
-            {"callee_id": "m:save", "callee_fqn": "App\\Repo::save",
-             "callee_kind": "Method", "callee_name": "save",
-             "from_method": "App\\Order::update"},  # Same callee, different method
+            {
+                "callee_id": "m:save",
+                "callee_fqn": "App\\Repo::save",
+                "callee_kind": "Method",
+                "callee_name": "save",
+                "from_method": "App\\Order::create",
+            },
+            {
+                "callee_id": "m:save",
+                "callee_fqn": "App\\Repo::save",
+                "callee_kind": "Method",
+                "callee_name": "save",
+                "from_method": "App\\Order::update",
+            },  # Same callee, different method
         ]
         with _patch_fetch_uses(data):
             result = build_class_uses(runner, node, max_depth=2)
@@ -1227,9 +1424,16 @@ class TestUsesPriorityConstant:
 
     def test_all_expected_keys_present(self):
         expected = {
-            "extends", "implements", "uses_trait", "property_type",
-            "method_call", "instantiation", "property_access",
-            "parameter_type", "return_type", "type_hint",
+            "extends",
+            "implements",
+            "uses_trait",
+            "property_type",
+            "method_call",
+            "instantiation",
+            "property_access",
+            "parameter_type",
+            "return_type",
+            "type_hint",
         }
         assert expected <= set(USES_PRIORITY.keys())
 

@@ -15,9 +15,7 @@ RETURN child
 """
 
 
-def query_override_neighbors(
-    runner: QueryRunner, node_id: str, direction: str
-) -> list[dict]:
+def query_override_neighbors(runner: QueryRunner, node_id: str, direction: str) -> list[dict]:
     """Query direct override neighbors for a method node.
 
     Args:
@@ -34,10 +32,12 @@ def query_override_neighbors(
     results = []
     for record in records:
         node = record[key]
-        results.append({
-            "node_id": node["node_id"],
-            "fqn": node["fqn"],
-            "file": node.get("file"),
-            "start_line": node.get("start_line"),
-        })
+        results.append(
+            {
+                "node_id": node["node_id"],
+                "fqn": node["fqn"],
+                "file": node.get("file"),
+                "start_line": node.get("start_line"),
+            }
+        )
     return results

@@ -5,24 +5,28 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from src.db.query_runner import QueryRunner
 from src.models.node import NodeData
 from src.models.results import UsageEntry, UsagesTreeResult
 from src.orchestration.usages import _build_usages_tree
-from src.db.query_runner import QueryRunner
+
 from .conftest import requires_neo4j
 
 
 def _reload_if_empty(conn):
     """Reload test data if the database was cleared by another test."""
+    from src.db.importer import import_edges, import_nodes, parse_sot
     from src.db.schema import ensure_schema
-    from src.db.importer import parse_sot, import_nodes, import_edges
 
     runner = QueryRunner(conn)
     count = runner.execute_count("MATCH (n:Node) RETURN count(n)")
     if count == 0:
         sot_path = (
             Path(__file__).parent.parent.parent
-            / "artifacts" / "kloc-dev" / "context-final" / "sot.json"
+            / "artifacts"
+            / "kloc-dev"
+            / "context-final"
+            / "sot.json"
         )
         ensure_schema(conn)
         nodes, edges = parse_sot(str(sot_path))
@@ -44,8 +48,9 @@ def _make_node(**overrides) -> NodeData:
     return NodeData(**defaults)
 
 
-def _mock_edge(source_id, source_fqn, loc_file=None, loc_line=None,
-               source_file=None, source_start_line=None):
+def _mock_edge(
+    source_id, source_fqn, loc_file=None, loc_line=None, source_file=None, source_start_line=None
+):
     return {
         "source_id": source_id,
         "source_fqn": source_fqn,
@@ -69,8 +74,10 @@ class TestBuildUsagesTreeDepth2:
         # Level 2: caller-1 -> caller-2
         level2_edges = [_mock_edge("caller-2", "App\\Caller2", "c2.php", 20)]
 
-        with patch("src.orchestration.usages.query_usages_for_node", return_value=level1_edges), \
-             patch("src.orchestration.usages.query_usages_direct", return_value=level2_edges):
+        with (
+            patch("src.orchestration.usages.query_usages_for_node", return_value=level1_edges),
+            patch("src.orchestration.usages.query_usages_direct", return_value=level2_edges),
+        ):
             result = _build_usages_tree(runner, target, depth=2, limit=100)
 
         assert len(result.tree) == 1
@@ -99,8 +106,10 @@ class TestBuildUsagesTreeDepth2:
                 return level2_edges_for_1
             return []
 
-        with patch("src.orchestration.usages.query_usages_for_node", return_value=level1_edges), \
-             patch("src.orchestration.usages.query_usages_direct", side_effect=mock_direct):
+        with (
+            patch("src.orchestration.usages.query_usages_for_node", return_value=level1_edges),
+            patch("src.orchestration.usages.query_usages_direct", side_effect=mock_direct),
+        ):
             result = _build_usages_tree(runner, target, depth=2, limit=100)
 
         # caller-2 is visited via caller-1's children first (DFS order),
@@ -132,8 +141,10 @@ class TestBuildUsagesTreeDepth2:
                 return level2_for_2
             return []
 
-        with patch("src.orchestration.usages.query_usages_for_node", return_value=level1_edges), \
-             patch("src.orchestration.usages.query_usages_direct", side_effect=mock_direct):
+        with (
+            patch("src.orchestration.usages.query_usages_for_node", return_value=level1_edges),
+            patch("src.orchestration.usages.query_usages_direct", side_effect=mock_direct),
+        ):
             result = _build_usages_tree(runner, target, depth=2, limit=100)
 
         assert len(result.tree) == 2
@@ -160,8 +171,10 @@ class TestBuildUsagesTreeDepth2:
             _mock_edge("caller-5", "App\\C5", "c5.php", 5),
         ]
 
-        with patch("src.orchestration.usages.query_usages_for_node", return_value=level1_edges), \
-             patch("src.orchestration.usages.query_usages_direct", return_value=level2_edges):
+        with (
+            patch("src.orchestration.usages.query_usages_for_node", return_value=level1_edges),
+            patch("src.orchestration.usages.query_usages_direct", return_value=level2_edges),
+        ):
             result = _build_usages_tree(runner, target, depth=2, limit=3)
 
         # Should have at most 3 total entries across all depths
@@ -175,8 +188,10 @@ class TestBuildUsagesTreeDepth2:
 
         level1_edges = [_mock_edge("caller-1", "App\\C1", "c1.php", 1)]
 
-        with patch("src.orchestration.usages.query_usages_for_node", return_value=level1_edges), \
-             patch("src.orchestration.usages.query_usages_direct") as mock_direct:
+        with (
+            patch("src.orchestration.usages.query_usages_for_node", return_value=level1_edges),
+            patch("src.orchestration.usages.query_usages_direct") as mock_direct,
+        ):
             result = _build_usages_tree(runner, target, depth=1, limit=100)
 
         # Direct query should NOT be called (only member query for root)
@@ -198,8 +213,10 @@ class TestBuildUsagesTreeDepth2:
                 return [_mock_edge("c3", "C3")]
             return []
 
-        with patch("src.orchestration.usages.query_usages_for_node", return_value=level1_edges), \
-             patch("src.orchestration.usages.query_usages_direct", side_effect=mock_direct):
+        with (
+            patch("src.orchestration.usages.query_usages_for_node", return_value=level1_edges),
+            patch("src.orchestration.usages.query_usages_direct", side_effect=mock_direct),
+        ):
             result = _build_usages_tree(runner, target, depth=3, limit=100)
 
         assert len(result.tree) == 1
@@ -217,7 +234,11 @@ class TestBuildUsagesTreeDepth2:
         target = _make_node()
         child = UsageEntry(depth=2, node_id="c2", fqn="App\\Child", file="ch.php", line=5)
         root_entry = UsageEntry(
-            depth=1, node_id="c1", fqn="App\\Root", file="r.php", line=10,
+            depth=1,
+            node_id="c1",
+            fqn="App\\Root",
+            file="r.php",
+            line=10,
             children=[child],
         )
         result = UsagesTreeResult(target=target, max_depth=2, tree=[root_entry])

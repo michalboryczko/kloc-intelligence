@@ -18,23 +18,18 @@ import jsonschema
 import pytest
 
 from src.models.node import NodeData
+from src.models.output import ContextOutput
 from src.models.results import (
     ContextEntry,
     ContextResult,
 )
-from src.models.output import ContextOutput
-
 
 # =========================================================================
 # Schema and snapshot loading
 # =========================================================================
 
-SCHEMA_PATH = (
-    Path(__file__).parent.parent.parent / "kloc-contracts" / "kloc-cli-context.json"
-)
-SNAPSHOT_PATH = (
-    Path(__file__).parent.parent.parent / "tests" / "snapshot-1802262244.json"
-)
+SCHEMA_PATH = Path(__file__).parent.parent.parent / "kloc-contracts" / "kloc-cli-context.json"
+SNAPSHOT_PATH = Path(__file__).parent.parent.parent / "tests" / "snapshot-1802262244.json"
 CASES_PATH = Path(__file__).parent.parent.parent / "tests" / "cases.json"
 
 
@@ -94,11 +89,26 @@ class TestSnapshotSchemaValidation:
 
 # Fields that must use camelCase (the contract schema defines these)
 EXPECTED_CAMEL_CASE = {
-    "maxDepth", "usedBy", "refType", "onKind", "returnType",
-    "constructorDeps", "accessCount", "methodCount", "via_interface",
-    "member_ref", "source_call", "entry_type", "variable_name",
-    "variable_symbol", "variable_type", "crossed_from", "result_var",
-    "value_kind", "uses_traits", "declaredIn",
+    "maxDepth",
+    "usedBy",
+    "refType",
+    "onKind",
+    "returnType",
+    "constructorDeps",
+    "accessCount",
+    "methodCount",
+    "via_interface",
+    "member_ref",
+    "source_call",
+    "entry_type",
+    "variable_name",
+    "variable_symbol",
+    "variable_type",
+    "crossed_from",
+    "result_var",
+    "value_kind",
+    "uses_traits",
+    "declaredIn",
 }
 
 # Fields that must NOT appear (snake_case equivalents of camelCase)
@@ -140,13 +150,9 @@ class TestSnapshotCamelCase:
         """No forbidden snake_case keys should appear in output."""
         output = snapshot_data[case_name]
         all_keys = _collect_all_keys(output)
-        violations = [
-            (key, path) for key, path in all_keys
-            if key in FORBIDDEN_SNAKE_CASE
-        ]
-        assert not violations, (
-            f"Found forbidden snake_case keys in '{case_name}':\n"
-            + "\n".join(f"  {key} at {path}" for key, path in violations)
+        violations = [(key, path) for key, path in all_keys if key in FORBIDDEN_SNAKE_CASE]
+        assert not violations, f"Found forbidden snake_case keys in '{case_name}':\n" + "\n".join(
+            f"  {key} at {path}" for key, path in violations
         )
 
 
@@ -161,8 +167,15 @@ def _find_none_values(obj, path="$") -> list[str]:
     We allow None for 'file', 'line', 'kind' fields (per schema: type: ["string", "null"]).
     We report all others.
     """
-    nullable_fields = {"file", "line", "kind", "target_kind", "param_name",
-                       "value_expr", "value_source"}
+    nullable_fields = {
+        "file",
+        "line",
+        "kind",
+        "target_kind",
+        "param_name",
+        "value_expr",
+        "value_source",
+    }
     nones = []
     if isinstance(obj, dict):
         for k, v in obj.items():
@@ -184,9 +197,8 @@ class TestSnapshotNoNoneValues:
         """Non-nullable fields should be omitted, not serialized as None."""
         output = snapshot_data[case_name]
         nones = _find_none_values(output)
-        assert not nones, (
-            f"Found unexpected None values in '{case_name}':\n"
-            + "\n".join(f"  {path}" for path in nones)
+        assert not nones, f"Found unexpected None values in '{case_name}':\n" + "\n".join(
+            f"  {path}" for path in nones
         )
 
 
@@ -221,9 +233,8 @@ class TestSnapshotLineNumbers:
         output = snapshot_data[case_name]
         lines = _collect_line_values(output)
         invalid = [(value, path) for value, path in lines if value < 1]
-        assert not invalid, (
-            f"Found non-1-based line numbers in '{case_name}':\n"
-            + "\n".join(f"  {value} at {path}" for value, path in invalid)
+        assert not invalid, f"Found non-1-based line numbers in '{case_name}':\n" + "\n".join(
+            f"  {value} at {path}" for value, path in invalid
         )
 
 
@@ -263,9 +274,8 @@ class TestSnapshotEntryStructure:
         errors = []
         for i, entry in enumerate(output.get("usedBy", [])):
             errors.extend(_validate_entry_structure(entry, f"usedBy[{i}]"))
-        assert not errors, (
-            f"Entry structure errors in '{case_name}':\n"
-            + "\n".join(f"  {e}" for e in errors)
+        assert not errors, f"Entry structure errors in '{case_name}':\n" + "\n".join(
+            f"  {e}" for e in errors
         )
 
     def test_uses_entries_have_required_fields(self, case_name, snapshot_data):
@@ -273,9 +283,8 @@ class TestSnapshotEntryStructure:
         errors = []
         for i, entry in enumerate(output.get("uses", [])):
             errors.extend(_validate_entry_structure(entry, f"uses[{i}]"))
-        assert not errors, (
-            f"Entry structure errors in '{case_name}':\n"
-            + "\n".join(f"  {e}" for e in errors)
+        assert not errors, f"Entry structure errors in '{case_name}':\n" + "\n".join(
+            f"  {e}" for e in errors
         )
 
 
@@ -292,9 +301,7 @@ class TestNodeKindCoverage:
         value-param, value-local."""
         categories = {c["category"] for c in cases}
         expected = {"class", "interface", "method", "property", "value-param", "value-local"}
-        assert expected.issubset(categories), (
-            f"Missing categories: {expected - categories}"
-        )
+        assert expected.issubset(categories), f"Missing categories: {expected - categories}"
 
     def test_all_node_kinds_in_snapshot_targets(self, snapshot_data):
         """Snapshot targets should cover all major node kinds."""

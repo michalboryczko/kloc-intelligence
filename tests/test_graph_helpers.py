@@ -4,13 +4,12 @@ Tests use mock data only -- no Neo4j required.
 """
 
 from src.logic.graph_helpers import (
-    member_display_name,
-    sort_entries_by_priority,
-    sort_entries_by_location,
     format_method_fqn,
     is_internal_reference,
+    member_display_name,
+    sort_entries_by_location,
+    sort_entries_by_priority,
 )
-
 
 # =============================================================================
 # member_display_name

@@ -19,7 +19,7 @@ Config file format:
 import json
 import signal
 import sys
-from typing import Any, Optional
+from typing import Any
 
 
 def _count_tree_nodes(entries: list) -> int:
@@ -38,7 +38,7 @@ class MCPServer:
     def __init__(
         self,
         database: str = "neo4j",
-        config_path: Optional[str] = None,
+        config_path: str | None = None,
     ):
         """Initialize server with database name or config file.
 
@@ -75,7 +75,7 @@ class MCPServer:
                     raise ValueError("Each project must have a 'name' field")
                 self._projects[name] = db
 
-    def _get_runner(self, project: Optional[str] = None):
+    def _get_runner(self, project: str | None = None):
         """Get QueryRunner for a project (lazy-loaded).
 
         Args:
@@ -97,9 +97,7 @@ class MCPServer:
 
         if project not in self._projects:
             available = list(self._projects.keys())
-            raise ValueError(
-                f"Unknown project: {project}. Available: {available}"
-            )
+            raise ValueError(f"Unknown project: {project}. Available: {available}")
 
         if project not in self._runners:
             database = self._projects[project]
@@ -126,10 +124,7 @@ class MCPServer:
 
     def get_projects(self) -> list[dict]:
         """Return list of configured projects."""
-        return [
-            {"name": name, "database": db}
-            for name, db in self._projects.items()
-        ]
+        return [{"name": name, "database": db} for name, db in self._projects.items()]
 
     def get_tools(self) -> list[dict]:
         """Return list of available MCP tools."""
@@ -556,7 +551,7 @@ class MCPServer:
             raise ValueError(f"Unknown tool: {name}")
         return handler(arguments)
 
-    def _resolve_symbol(self, symbol: str, project: Optional[str] = None):
+    def _resolve_symbol(self, symbol: str, project: str | None = None):
         """Resolve symbol and return first candidate or raise error."""
         from ..db.queries.resolve import resolve_symbol
 
@@ -610,8 +605,8 @@ class MCPServer:
         return result.to_dict()
 
     def _handle_context(self, args: dict) -> dict:
-        from ..orchestration.context import execute_context
         from ..models.output import ContextOutput
+        from ..orchestration.context import execute_context
 
         project = args.get("project")
         runner = self._get_runner(project)
@@ -734,8 +729,8 @@ class MCPServer:
         }
 
     def _handle_import(self, args: dict) -> dict:
-        from ..db.importer import parse_sot, import_nodes, import_edges
-        from ..db.schema import ensure_schema, drop_all
+        from ..db.importer import import_edges, import_nodes, parse_sot
+        from ..db.schema import drop_all, ensure_schema
 
         project = args.get("project")
         runner = self._get_runner(project)
@@ -760,8 +755,13 @@ class MCPServer:
         }
 
     def _handle_import_flows(self, args: dict) -> dict:
-        import os
-        from ..db.flow_importer import load_symfony_kloc, parse_flows, import_flow_nodes, import_flow_edges, clear_flows
+        from ..db.flow_importer import (
+            clear_flows,
+            import_flow_edges,
+            import_flow_nodes,
+            load_symfony_kloc,
+            parse_flows,
+        )
         from ..db.schema import ensure_schema
 
         project = args.get("project")
@@ -773,24 +773,6 @@ class MCPServer:
         nodes, edges = parse_flows(data)
         entry_count = sum(1 for e in edges if e["type"] == "flow_entry")
         trigger_count = sum(1 for e in edges if e["type"] == "flow_triggers")
-
-        try:
-            from qdrant_client import QdrantClient
-            qdrant_url = os.environ.get("QDRANT_URL", "http://localhost:6333")
-            qdrant_api_key = os.environ.get("QDRANT_API_KEY") or None
-            qdrant = QdrantClient(url=qdrant_url, api_key=qdrant_api_key)
-            for name in (
-                "flow_business_embeddings",
-                "flow_technical_embeddings",
-                "flow_search_embeddings",
-            ):
-                try:
-                    qdrant.delete_collection(name)
-                except Exception:
-                    pass
-            qdrant.close()
-        except Exception:
-            pass
 
         clear_flows(conn)
         import_flow_nodes(conn, nodes)
@@ -823,9 +805,9 @@ class MCPServer:
     def _handle_flows(self, args: dict) -> dict:
         from ..db.queries.flows import (
             VALID_FLOW_TYPES,
-            list_flows,
             find_flow,
             get_flow_detail,
+            list_flows,
         )
 
         project = args.get("project")
@@ -900,7 +882,9 @@ class MCPServer:
                 "file": node.file,
             }
 
-        start = node.enclosing_start_line if node.enclosing_start_line is not None else node.start_line
+        start = (
+            node.enclosing_start_line if node.enclosing_start_line is not None else node.start_line
+        )
         end = node.enclosing_end_line if node.enclosing_end_line is not None else node.end_line
         start_1b = (start + 1) if start is not None else None
         end_1b = (end + 1) if end is not None else None
@@ -978,7 +962,7 @@ class MCPServer:
 
 def run_mcp_server(
     database: str = "neo4j",
-    config_path: Optional[str] = None,
+    config_path: str | None = None,
 ):
     """Run the MCP server using stdio with JSON-RPC 2.0 protocol.
 
@@ -996,7 +980,9 @@ def run_mcp_server(
     signal.signal(signal.SIGTERM, shutdown)
 
     def send_response(
-        req_id: Any, result: Any = None, error: Any = None,
+        req_id: Any,
+        result: Any = None,
+        error: Any = None,
     ):
         response: dict = {"jsonrpc": "2.0", "id": req_id}
         if error is not None:
@@ -1022,14 +1008,17 @@ def run_mcp_server(
 
         try:
             if method == "initialize":
-                send_response(req_id, {
-                    "protocolVersion": "2024-11-05",
-                    "capabilities": {"tools": {}},
-                    "serverInfo": {
-                        "name": "kloc-intelligence",
-                        "version": "0.1.0",
+                send_response(
+                    req_id,
+                    {
+                        "protocolVersion": "2024-11-05",
+                        "capabilities": {"tools": {}},
+                        "serverInfo": {
+                            "name": "kloc-intelligence",
+                            "version": "0.1.0",
+                        },
                     },
-                })
+                )
             elif method == "notifications/initialized":
                 pass  # No response needed for notifications
             elif method == "tools/list":
@@ -1038,12 +1027,17 @@ def run_mcp_server(
                 tool_name = params.get("name", "")
                 arguments = params.get("arguments", {})
                 tool_result = server.call_tool(tool_name, arguments)
-                send_response(req_id, {
-                    "content": [{
-                        "type": "text",
-                        "text": json.dumps(tool_result, indent=2),
-                    }],
-                })
+                send_response(
+                    req_id,
+                    {
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": json.dumps(tool_result, indent=2),
+                            }
+                        ],
+                    },
+                )
             elif method == "ping":
                 send_response(req_id, {})
             else:

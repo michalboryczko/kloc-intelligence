@@ -15,8 +15,8 @@ Usage:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
 
+from .node import NodeData
 from .results import (
     ArgumentInfo,
     ContextEntry,
@@ -24,10 +24,9 @@ from .results import (
     DefinitionInfo,
     MemberRef,
 )
-from .node import NodeData
 
 
-def _normalize_param_fqn(param_fqn: Optional[str]) -> Optional[str]:
+def _normalize_param_fqn(param_fqn: str | None) -> str | None:
     """Normalize param FQN by stripping __construct() from promoted parameters.
 
     'App\\Entity\\Order::__construct().$id' -> 'App\\Entity\\Order::$id'
@@ -39,12 +38,12 @@ def _normalize_param_fqn(param_fqn: Optional[str]) -> Optional[str]:
         return param_fqn
     ns_class, member = param_fqn.rsplit("::", 1)
     if member.startswith("__construct()."):
-        member = member[len("__construct()."):]
+        member = member[len("__construct().") :]
         return f"{ns_class}::{member}"
     return param_fqn
 
 
-def _shorten_param_key(param_fqn: Optional[str], param_name: Optional[str], position: int) -> str:
+def _shorten_param_key(param_fqn: str | None, param_name: str | None, position: int) -> str:
     """Shorten param key for flat args format: 'Namespace\\Class::method().$param' -> 'Class::method().$param'.
 
     Strips the namespace prefix but keeps the rest intact.
@@ -65,14 +64,14 @@ class OutputArgumentInfo:
     """Argument-to-parameter mapping at a call site."""
 
     position: int
-    param_name: Optional[str]
-    value_expr: Optional[str]
-    value_source: Optional[str]
+    param_name: str | None
+    value_expr: str | None
+    value_source: str | None
 
-    value_type: Optional[str] = None
-    param_fqn: Optional[str] = None
-    value_ref_symbol: Optional[str] = None
-    source_chain: Optional[list] = None
+    value_type: str | None = None
+    param_fqn: str | None = None
+    value_ref_symbol: str | None = None
+    source_chain: list | None = None
 
     @classmethod
     def from_info(cls, info: ArgumentInfo) -> OutputArgumentInfo:
@@ -111,16 +110,16 @@ class OutputMemberRef:
 
     target_name: str
     target_fqn: str
-    target_kind: Optional[str]
-    file: Optional[str]
-    line: Optional[int]  # 1-based
+    target_kind: str | None
+    file: str | None
+    line: int | None  # 1-based
 
-    reference_type: Optional[str] = None
-    access_chain: Optional[str] = None
-    access_chain_symbol: Optional[str] = None
-    on_kind: Optional[str] = None
-    on_file: Optional[str] = None
-    on_line: Optional[int] = None  # 1-based
+    reference_type: str | None = None
+    access_chain: str | None = None
+    access_chain_symbol: str | None = None
+    on_kind: str | None = None
+    on_file: str | None = None
+    on_line: int | None = None  # 1-based
 
     @classmethod
     def from_ref(cls, ref: MemberRef) -> OutputMemberRef:
@@ -172,54 +171,54 @@ class OutputEntry:
     # Required fields (always present in dict output)
     depth: int
     fqn: str
-    kind: Optional[str]
-    file: Optional[str]
-    line: Optional[int]  # 1-based, removed from dict when sites present
+    kind: str | None
+    file: str | None
+    line: int | None  # 1-based, removed from dict when sites present
     children: list[OutputEntry]
 
     # Signature (mode-dependent inclusion)
-    signature: Optional[str] = None
+    signature: str | None = None
 
     # Reference type
-    ref_type: Optional[str] = None
+    ref_type: str | None = None
 
     # USED BY direction
     via_interface: bool = False
-    via: Optional[str] = None
+    via: str | None = None
 
     # USES direction - implementations
-    implementations: Optional[list[OutputEntry]] = None
+    implementations: list[OutputEntry] | None = None
 
     # Member reference (method-level context only)
-    member_ref: Optional[OutputMemberRef] = None
+    member_ref: OutputMemberRef | None = None
 
     # Arguments - two formats depending on context mode
-    arguments: Optional[list[OutputArgumentInfo]] = None  # method-level: rich list
-    args: Optional[dict[str, str]] = None  # class-level: flat key->value
+    arguments: list[OutputArgumentInfo] | None = None  # method-level: rich list
+    args: dict[str, str] | None = None  # class-level: flat key->value
 
     # Call metadata
-    callee: Optional[str] = None
-    on: Optional[str] = None
-    on_kind: Optional[str] = None
-    result_var: Optional[str] = None
+    callee: str | None = None
+    on: str | None = None
+    on_kind: str | None = None
+    result_var: str | None = None
 
     # Variable-centric flow
-    entry_type: Optional[str] = None
-    variable_name: Optional[str] = None
-    variable_symbol: Optional[str] = None
-    variable_type: Optional[str] = None
-    source_call: Optional[OutputEntry] = None
+    entry_type: str | None = None
+    variable_name: str | None = None
+    variable_symbol: str | None = None
+    variable_type: str | None = None
+    source_call: OutputEntry | None = None
 
     # Cross-method boundary
-    crossed_from: Optional[str] = None
+    crossed_from: str | None = None
 
     # Multi-site
-    sites: Optional[list] = None
+    sites: list | None = None
 
     # Property group
-    property_name: Optional[str] = None
-    access_count: Optional[int] = None
-    method_count: Optional[int] = None
+    property_name: str | None = None
+    access_count: int | None = None
+    method_count: int | None = None
 
     @classmethod
     def from_entry(cls, entry: ContextEntry, *, class_level: bool = False) -> OutputEntry:
@@ -233,9 +232,9 @@ class OutputEntry:
             if entry.signature and entry.ref_type in ("override", "inherited"):
                 signature = entry.signature
         else:
-            if entry.signature and not entry.ref_type:
-                signature = entry.signature
-            elif entry.signature and entry.ref_type in ("override", "inherited"):
+            if (entry.signature and not entry.ref_type) or (
+                entry.signature and entry.ref_type in ("override", "inherited")
+            ):
                 signature = entry.signature
 
         # Children (recursive)
@@ -244,7 +243,9 @@ class OutputEntry:
         # Implementations
         implementations = None
         if entry.implementations:
-            implementations = [cls.from_entry(impl, class_level=class_level) for impl in entry.implementations]
+            implementations = [
+                cls.from_entry(impl, class_level=class_level) for impl in entry.implementations
+            ]
 
         # Member ref (method-level only, only when no ref_type)
         member_ref = None
@@ -411,9 +412,9 @@ class OutputTarget:
     """The queried target symbol."""
 
     fqn: str
-    file: Optional[str]
-    line: Optional[int]  # 1-based
-    signature: Optional[str] = None
+    file: str | None
+    line: int | None  # 1-based
+    signature: str | None = None
 
     @classmethod
     def from_node(cls, node: NodeData) -> OutputTarget:
@@ -437,36 +438,36 @@ class OutputDefinition:
 
     fqn: str
     kind: str
-    file: Optional[str] = None
-    line: Optional[int] = None  # 1-based
+    file: str | None = None
+    line: int | None = None  # 1-based
 
     # Method/function fields
-    signature: Optional[str] = None
-    arguments: Optional[list[dict]] = None
-    return_type: Optional[dict] = None
+    signature: str | None = None
+    arguments: list[dict] | None = None
+    return_type: dict | None = None
 
     # Class/interface fields
-    properties: Optional[list[dict]] = None
-    methods: Optional[list[dict]] = None
-    extends: Optional[str] = None
-    implements: Optional[list[str]] = None
-    uses_traits: Optional[list[str]] = None
-    constructor_deps: Optional[list[dict]] = None
+    properties: list[dict] | None = None
+    methods: list[dict] | None = None
+    extends: str | None = None
+    implements: list[str] | None = None
+    uses_traits: list[str] | None = None
+    constructor_deps: list[dict] | None = None
 
     # Property fields
-    type_name: Optional[str] = None  # serialized as "type" (string for Property)
-    visibility: Optional[str] = None
-    promoted: Optional[bool] = None
-    readonly: Optional[bool] = None
-    static: Optional[bool] = None
+    type_name: str | None = None  # serialized as "type" (string for Property)
+    visibility: str | None = None
+    promoted: bool | None = None
+    readonly: bool | None = None
+    static: bool | None = None
 
     # Value fields
-    value_kind: Optional[str] = None
-    type_info: Optional[dict] = None  # serialized as "type" (object for Value)
-    source: Optional[dict] = None
+    value_kind: str | None = None
+    type_info: dict | None = None  # serialized as "type" (object for Value)
+    source: dict | None = None
 
     # Containment
-    declared_in: Optional[dict] = None
+    declared_in: dict | None = None
 
     @classmethod
     def from_info(cls, info: DefinitionInfo) -> OutputDefinition:
@@ -588,7 +589,7 @@ class ContextOutput:
     max_depth: int
     used_by: list[OutputEntry]
     uses: list[OutputEntry]
-    definition: Optional[OutputDefinition] = None
+    definition: OutputDefinition | None = None
 
     @classmethod
     def from_result(cls, result: ContextResult) -> ContextOutput:

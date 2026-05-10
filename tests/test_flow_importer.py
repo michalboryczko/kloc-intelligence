@@ -22,7 +22,6 @@ from src.db.flow_importer import (
 
 from .conftest import requires_neo4j
 
-
 REFERENCE_FIXTURE = Path(
     "/Users/michal/dev/ai/kloc/kloc-reference-project-php/.kloc/symfony-kloc.json"
 )
@@ -30,12 +29,9 @@ REFERENCE_FIXTURE = Path(
 ORDER_GET_FLOW_ID = "flow:http:App\\Ui\\Rest\\Controller\\OrderController::get"
 ORDER_GET_METHOD_NODE_ID = "node:779b5ec2e2f2e61b"
 
-MESSAGE_HANDLER_FLOW_ID = (
-    "flow:message:App\\Ui\\Messenger\\Handler\\OrderCreatedHandler::__invoke"
-)
+MESSAGE_HANDLER_FLOW_ID = "flow:message:App\\Ui\\Messenger\\Handler\\OrderCreatedHandler::__invoke"
 ORDER_EVENT_FLOW_ID = (
-    "flow:event:App\\Ui\\EventSubscriber\\OrderEventSubscriber"
-    "::onOrderCreated[OrderCreatedEvent]"
+    "flow:event:App\\Ui\\EventSubscriber\\OrderEventSubscriber::onOrderCreated[OrderCreatedEvent]"
 )
 PROCESS_ORDERS_FLOW_ID = "flow:cli:App\\Ui\\Console\\ProcessOrdersCommand::execute"
 
@@ -106,17 +102,19 @@ class TestParseFlowsReferenceProject:
 
     def test_parse_flows_filters_non_app(self, reference_data):
         synthetic = copy.deepcopy(reference_data)
-        synthetic["flows"].append({
-            "id": "flow:http:Symfony\\Bundle\\FrameworkBundle\\Controller\\NotMineController::index",
-            "type": "http",
-            "entry": {
-                "fqn": "Symfony\\Bundle\\FrameworkBundle\\Controller\\NotMineController",
-                "method": "index",
-                "method_node_id": "node:framework",
-                "route": "/_framework/index",
-                "http_methods": ["GET"],
-            },
-        })
+        synthetic["flows"].append(
+            {
+                "id": "flow:http:Symfony\\Bundle\\FrameworkBundle\\Controller\\NotMineController::index",
+                "type": "http",
+                "entry": {
+                    "fqn": "Symfony\\Bundle\\FrameworkBundle\\Controller\\NotMineController",
+                    "method": "index",
+                    "method_node_id": "node:framework",
+                    "route": "/_framework/index",
+                    "http_methods": ["GET"],
+                },
+            }
+        )
         nodes, _ = parse_flows(synthetic)
         flow_ids = {n["flow_id"] for n in nodes}
         assert all(not fid.startswith("flow:http:Symfony\\") for fid in flow_ids)
@@ -222,9 +220,7 @@ def _count_flows(conn) -> int:
 
 def _count_rel(conn, rel_type: str) -> int:
     with conn.session() as session:
-        return session.run(
-            f"MATCH ()-[r:{rel_type}]->() RETURN count(r) AS n"
-        ).single()["n"]
+        return session.run(f"MATCH ()-[r:{rel_type}]->() RETURN count(r) AS n").single()["n"]
 
 
 def _full_import(conn, data: dict) -> tuple[int, int, int]:
@@ -283,8 +279,7 @@ class TestFlowImporterNeo4j:
         _full_import(self.conn, reference_data)
         with self.conn.session() as session:
             result = session.run(
-                "MATCH (f:Flow {flow_id: $fid})-[:FLOW_ENTRY]->(n:Node) "
-                "RETURN n.node_id AS nid",
+                "MATCH (f:Flow {flow_id: $fid})-[:FLOW_ENTRY]->(n:Node) RETURN n.node_id AS nid",
                 fid=ORDER_GET_FLOW_ID,
             )
             record = result.single()
@@ -295,11 +290,13 @@ class TestFlowImporterNeo4j:
         """AC-5 regression: from OrderController::get the only outgoing rel is FLOW_ENTRY."""
         _full_import(self.conn, reference_data)
         with self.conn.session() as session:
-            rows = list(session.run(
-                "MATCH (:Flow {flow_id: $fid})-[r]->() "
-                "RETURN type(r) AS rel_type, count(r) AS cnt",
-                fid=ORDER_GET_FLOW_ID,
-            ))
+            rows = list(
+                session.run(
+                    "MATCH (:Flow {flow_id: $fid})-[r]->() "
+                    "RETURN type(r) AS rel_type, count(r) AS cnt",
+                    fid=ORDER_GET_FLOW_ID,
+                )
+            )
         assert len(rows) == 1
         assert rows[0]["rel_type"] == "FLOW_ENTRY"
         assert rows[0]["cnt"] == 1
@@ -316,13 +313,9 @@ class TestFlowImporterNeo4j:
 
     # --- Missing-node tolerance ---------------------------------------------
 
-    def test_missing_method_node_warns_and_continues(
-        self, reference_data, caplog
-    ):
+    def test_missing_method_node_warns_and_continues(self, reference_data, caplog):
         bad = copy.deepcopy(reference_data)
-        target_flow = next(
-            f for f in bad["flows"] if f["id"] == ORDER_GET_FLOW_ID
-        )
+        target_flow = next(f for f in bad["flows"] if f["id"] == ORDER_GET_FLOW_ID)
         target_flow["entry"]["method_node_id"] = "node:doesnotexist000000"
 
         caplog.set_level(logging.WARNING, logger="src.db.flow_importer")
@@ -338,16 +331,18 @@ class TestFlowImporterNeo4j:
         assert _count_rel(self.conn, "FLOW_TRIGGERS") == 3
         # OrderController::get exists but has no FLOW_ENTRY
         with self.conn.session() as session:
-            rows = list(session.run(
-                "MATCH (:Flow {flow_id: $fid})-[r]->() RETURN type(r) AS t",
-                fid=ORDER_GET_FLOW_ID,
-            ))
+            rows = list(
+                session.run(
+                    "MATCH (:Flow {flow_id: $fid})-[r]->() RETURN type(r) AS t",
+                    fid=ORDER_GET_FLOW_ID,
+                )
+            )
         assert rows == []
         # Warning logged for the missing node
         warnings = [r for r in caplog.records if r.levelno >= logging.WARNING]
-        assert any(
-            "node:doesnotexist000000" in r.getMessage() for r in warnings
-        ), "expected a WARNING mentioning the missing node_id"
+        assert any("node:doesnotexist000000" in r.getMessage() for r in warnings), (
+            "expected a WARNING mentioning the missing node_id"
+        )
 
     # --- Property contract --------------------------------------------------
 
@@ -362,8 +357,7 @@ class TestFlowImporterNeo4j:
         flow = dict(record["flow"])
 
         # Required keys per spec D3
-        for k in ("flow_id", "type", "entry_fqn", "entry_method", "name",
-                  "route", "http_methods"):
+        for k in ("flow_id", "type", "entry_fqn", "entry_method", "name", "route", "http_methods"):
             assert k in flow, f"missing required key {k!r} on http :Flow"
         assert flow["type"] == "http"
         assert flow["name"] == "GET /api/orders/{id}"
@@ -371,6 +365,5 @@ class TestFlowImporterNeo4j:
         assert list(flow["http_methods"]) == ["GET"]
 
         # Forbidden enrichment keys must NEVER appear (AC-14)
-        for k in ("explanation_business", "explanation_technical",
-                  "explanation_search"):
+        for k in ("explanation_business", "explanation_technical", "explanation_search"):
             assert k not in flow, f"forbidden key {k!r} present on :Flow"
