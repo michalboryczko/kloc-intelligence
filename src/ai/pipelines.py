@@ -4,8 +4,11 @@ import logging
 
 from haystack import Document, Pipeline
 from haystack.components.builders import ChatPromptBuilder
-from haystack.components.embedders import OpenAIDocumentEmbedder, OpenAITextEmbedder
 from haystack.components.generators.chat import OpenAIChatGenerator
+from ._haystack_compat import (
+    TolerantDocumentEmbedder as OpenAIDocumentEmbedder,
+    TolerantTextEmbedder as OpenAITextEmbedder,
+)
 from haystack.components.writers import DocumentWriter
 from haystack.dataclasses import ChatMessage
 from haystack.utils import Secret
