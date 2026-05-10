@@ -18,9 +18,16 @@ from src.db.importer import (
     validate_import,
 )
 
-from .conftest import requires_neo4j
+from .conftest import SOT_FIXTURE_PATH, requires_neo4j
 
-SOT_PATH = Path("/Users/michal/dev/ai/kloc/artifacts/kloc-dev/context-final/sot.json")
+SOT_PATH = SOT_FIXTURE_PATH
+
+# Whole-module skip when the fixture sot.json isn't available — every test in
+# this file parses the real dataset, so without it nothing is meaningful.
+pytestmark = pytest.mark.skipif(
+    not SOT_PATH.is_file(),
+    reason=f"Test dataset sot.json not available at {SOT_PATH}",
+)
 
 
 # --- S01: Parser tests ---

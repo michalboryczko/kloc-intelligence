@@ -42,23 +42,27 @@ def neo4j_connection(neo4j_config: Neo4jConfig):
     conn.close()
 
 
+SOT_FIXTURE_PATH = (
+    Path(__file__).parent.parent.parent / "artifacts" / "kloc-dev" / "context-final" / "sot.json"
+)
+
+
 def _load_test_dataset(conn):
-    """Load the context-final test dataset into Neo4j."""
+    """Load the context-final test dataset into Neo4j.
+
+    Skips the calling test when the fixture sot.json is missing — that file
+    lives in the parent monorepo's gitignored artifacts/ tree and isn't
+    bundled with the standalone repo, so CI environments hit the skip.
+    """
     from src.db.importer import import_edges, import_nodes, parse_sot
     from src.db.schema import drop_all, ensure_schema
 
-    sot_path = (
-        Path(__file__).parent.parent.parent
-        / "artifacts"
-        / "kloc-dev"
-        / "context-final"
-        / "sot.json"
-    )
-    assert sot_path.exists(), f"Test dataset not found at {sot_path}"
+    if not SOT_FIXTURE_PATH.is_file():
+        pytest.skip(f"Test dataset sot.json not available at {SOT_FIXTURE_PATH}")
 
     drop_all(conn)
     ensure_schema(conn)
-    nodes, edges = parse_sot(str(sot_path))
+    nodes, edges = parse_sot(str(SOT_FIXTURE_PATH))
     import_nodes(conn, nodes)
     import_edges(conn, edges)
     return len(nodes)

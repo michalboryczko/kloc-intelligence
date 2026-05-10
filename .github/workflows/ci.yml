@@ -74,8 +74,42 @@ jobs:
       NEO4J_USERNAME: neo4j
       NEO4J_PASSWORD: kloc-intelligence
       QDRANT_URL: http://localhost:6333
+      # Captures secret presence so we can use it in step-level `if:` —
+      # secrets can't be compared directly in `if:` on all runner versions.
+      HAS_KLOC_FULL_TOKEN: ${{ secrets.KLOC_FULL_TOKEN != '' }}
     steps:
       - uses: actions/checkout@v4
+
+      - name: Checkout kloc-full (parent monorepo) for snapshot + contract fixtures
+        # The snapshot, contract and integration test suites read fixtures
+        # via `Path(__file__).parent.parent.parent`, which resolves one
+        # level above ${GITHUB_WORKSPACE}. Cloning kloc-full and copying
+        # its tests/, kloc-contracts/, artifacts/ subdirs to that parent
+        # makes the fixtures available. The step is skipped when
+        # KLOC_FULL_TOKEN isn't set; tests then auto-skip the fixture-
+        # dependent cases.
+        if: env.HAS_KLOC_FULL_TOKEN == 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: michalboryczko/kloc-full
+          path: _kloc-full
+          token: ${{ secrets.KLOC_FULL_TOKEN }}
+
+      - name: Stage kloc-full fixtures one level above the workspace
+        if: env.HAS_KLOC_FULL_TOKEN == 'true'
+        run: |
+          set -euo pipefail
+          parent="$(dirname "${GITHUB_WORKSPACE}")"
+          for sub in tests kloc-contracts artifacts; do
+            if [ -d "_kloc-full/$sub" ]; then
+              rm -rf "$parent/$sub"
+              cp -r "_kloc-full/$sub" "$parent/$sub"
+              echo "Staged $sub -> $parent/$sub"
+            else
+              echo "Skipping (not in kloc-full): $sub"
+            fi
+          done
+          rm -rf _kloc-full
 
       - name: Set up uv
         uses: astral-sh/setup-uv@v3
@@ -90,12 +124,13 @@ jobs:
         run: uv sync --extra dev --extra ai
 
       - name: Run pytest
-        # Snapshot tests + Haystack-dependent tests require external fixtures
-        # not present in CI, so we skip them. Everything else (unit + Neo4j
-        # integration) must pass.
+        # test_flow_enricher.py needs a real PHP project + Haystack pipeline;
+        # always deselected in CI. Every other test is fixture-tolerant: when
+        # kloc-full fixtures are present they exercise the snapshot, contract,
+        # and integration paths; when absent (no KLOC_FULL_TOKEN), the affected
+        # tests pytest.skip rather than erroring.
         run: |
           uv run pytest \
-            --deselect tests/test_snapshot.py \
             --deselect tests/test_flow_enricher.py \
             -q --no-header
 

@@ -32,10 +32,17 @@ SCHEMA_PATH = Path(__file__).parent.parent.parent / "kloc-contracts" / "kloc-cli
 SNAPSHOT_PATH = Path(__file__).parent.parent.parent / "tests" / "snapshot-1802262244.json"
 CASES_PATH = Path(__file__).parent.parent.parent / "tests" / "cases.json"
 
+# These fixtures live in the parent monorepo (kloc/), not in the
+# kloc-intelligence repo. When running in the standalone repo / CI, they
+# are absent and the snapshot-driven tests skip instead of erroring out.
+_FIXTURES_AVAILABLE = SCHEMA_PATH.is_file() and SNAPSHOT_PATH.is_file() and CASES_PATH.is_file()
+
 
 @pytest.fixture(scope="module")
 def schema():
     """Load the contract JSON schema."""
+    if not SCHEMA_PATH.is_file():
+        pytest.skip(f"Contract schema not available at {SCHEMA_PATH}")
     with open(SCHEMA_PATH) as f:
         return json.load(f)
 
@@ -43,6 +50,8 @@ def schema():
 @pytest.fixture(scope="module")
 def snapshot_data():
     """Load all golden snapshot outputs."""
+    if not SNAPSHOT_PATH.is_file():
+        pytest.skip(f"Snapshot fixture not available at {SNAPSHOT_PATH}")
     with open(SNAPSHOT_PATH) as f:
         return json.load(f)
 
@@ -50,6 +59,8 @@ def snapshot_data():
 @pytest.fixture(scope="module")
 def cases():
     """Load test case definitions."""
+    if not CASES_PATH.is_file():
+        pytest.skip(f"Cases fixture not available at {CASES_PATH}")
     with open(CASES_PATH) as f:
         return json.load(f)["cases"]
 
@@ -60,7 +71,13 @@ def cases():
 
 
 def _snapshot_case_ids():
-    """Generate case IDs from snapshot file for parametrize."""
+    """Generate case IDs from snapshot file for parametrize.
+
+    Returns an empty list when the snapshot file is missing (standalone repo /
+    CI), so the parametrized class collects to zero tests instead of erroring.
+    """
+    if not SNAPSHOT_PATH.is_file():
+        return []
     with open(SNAPSHOT_PATH) as f:
         data = json.load(f)
     return list(data.keys())

@@ -37,7 +37,13 @@ SCHEMA_PATH = Path(__file__).parent.parent.parent / "kloc-contracts" / "kloc-cli
 
 
 def _load_schema() -> dict:
-    """Load the contract schema for context output."""
+    """Load the contract schema for context output.
+
+    Skips the calling test when the schema file is missing (e.g. running
+    in the standalone repo without the parent monorepo's kloc-contracts/).
+    """
+    if not SCHEMA_PATH.is_file():
+        pytest.skip(f"Contract schema not available at {SCHEMA_PATH}")
     with open(SCHEMA_PATH) as f:
         return json.load(f)
 
