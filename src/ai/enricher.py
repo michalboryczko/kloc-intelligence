@@ -1,6 +1,7 @@
 """Batch enrichment orchestrator for generating explanations and embeddings."""
 
 import logging
+import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -8,8 +9,10 @@ from dataclasses import dataclass, field
 from ..db.query_runner import QueryRunner
 from ..db.result_mapper import record_to_node, records_to_nodes
 from ..models.node import NodeData
+from ._parallel import ThreadLocalPipelines, run_parallel
 from .chunker import CodeChunker
 from .config import AIConfig
+from .pipelines import make_embed_documents, run_explain_class, run_explain_method
 from .source_reader import SourceReader
 
 logger = logging.getLogger(__name__)
@@ -26,6 +29,16 @@ class EnrichmentProgress:
     failed_nodes: list[str] = field(default_factory=list)
 
 
+@dataclass
+class _Pipelines:
+    """Container for one worker thread's Haystack pipelines."""
+
+    method_explain: object
+    class_explain: object
+    code_embed: object
+    explain_embed: object
+
+
 class Enricher:
     """Orchestrates explanation generation and embedding for Class/Method nodes.
 
@@ -38,22 +51,64 @@ class Enricher:
         self._config = config
         self._reader = SourceReader(config.project_root)
         self._chunker = CodeChunker(max_tokens=config.max_tokens_per_chunk)
-        # Lazy-init pipelines
-        self._method_explain_pipeline = None
-        self._class_explain_pipeline = None
-        self._code_embed_pipeline = None
-        self._explain_embed_pipeline = None
+        # Test seam: tests may assign a MagicMock to any of these to override
+        # the thread-local pipelines. `_get_pipelines()` consults these first.
+        self._method_explain_pipeline: object = None
+        self._class_explain_pipeline: object = None
+        self._code_embed_pipeline: object = None
+        self._explain_embed_pipeline: object = None
+        self._pipelines: ThreadLocalPipelines[_Pipelines] = ThreadLocalPipelines(
+            self._build_pipelines
+        )
 
-    def _init_pipelines(self):
-        """Lazy-initialize Haystack pipelines."""
-        if self._method_explain_pipeline is not None:
-            return
+    def _build_pipelines(self) -> _Pipelines:
+        """Construct a fresh pipeline set for the calling thread."""
         from .pipelines import build_embed_pipeline, build_explain_pipeline
 
-        self._method_explain_pipeline = build_explain_pipeline(self._config, kind="Method")
-        self._class_explain_pipeline = build_explain_pipeline(self._config, kind="Class")
-        self._code_embed_pipeline = build_embed_pipeline(self._config, "code_embeddings")
-        self._explain_embed_pipeline = build_embed_pipeline(self._config, "explain_embeddings")
+        return _Pipelines(
+            method_explain=build_explain_pipeline(self._config, kind="Method"),
+            class_explain=build_explain_pipeline(self._config, kind="Class"),
+            code_embed=build_embed_pipeline(self._config, "code_embeddings"),
+            explain_embed=build_embed_pipeline(self._config, "explain_embeddings"),
+        )
+
+    def _get_pipelines(self) -> _Pipelines:
+        """Return the active pipeline set.
+
+        Test seam contract: each `_*_pipeline` instance attribute, if non-None,
+        wins over the thread-local pipeline of the same kind for every thread.
+        The thread-local set is built lazily and only when at least one of the
+        four slots is not injected.
+        """
+        attrs = (
+            self._method_explain_pipeline,
+            self._class_explain_pipeline,
+            self._code_embed_pipeline,
+            self._explain_embed_pipeline,
+        )
+        if all(a is not None for a in attrs):
+            return _Pipelines(
+                method_explain=self._method_explain_pipeline,
+                class_explain=self._class_explain_pipeline,
+                code_embed=self._code_embed_pipeline,
+                explain_embed=self._explain_embed_pipeline,
+            )
+
+        thread_set = self._pipelines.get()
+        return _Pipelines(
+            method_explain=self._method_explain_pipeline
+            if self._method_explain_pipeline is not None
+            else thread_set.method_explain,
+            class_explain=self._class_explain_pipeline
+            if self._class_explain_pipeline is not None
+            else thread_set.class_explain,
+            code_embed=self._code_embed_pipeline
+            if self._code_embed_pipeline is not None
+            else thread_set.code_embed,
+            explain_embed=self._explain_embed_pipeline
+            if self._explain_embed_pipeline is not None
+            else thread_set.explain_embed,
+        )
 
     def enrich_all(
         self,
@@ -61,40 +116,67 @@ class Enricher:
         kinds: list[str] | None = None,
         batch_size: int = 10,
         callback: Callable[[EnrichmentProgress], None] | None = None,
+        *,
+        max_concurrency: int | None = None,
     ) -> EnrichmentProgress:
-        """Batch enrich all Class/Method nodes with explanations and embeddings."""
-        self._init_pipelines()
+        """Batch enrich all Class/Method nodes with explanations and embeddings.
+
+        Concurrency: items run in a `ThreadPoolExecutor`. When
+        `max_concurrency == 1` the executor is bypassed (sequential fast path);
+        progress is byte-identical to the pre-feature loop. When `None`, the
+        value is taken from `AIConfig.enrich_concurrency`.
+        """
         target_kinds = kinds or ENRICHABLE_KINDS
         progress = EnrichmentProgress()
 
         nodes = self._get_enrichable_nodes(target_kinds, force)
         progress.total = len(nodes)
 
+        effective_concurrency = (
+            max_concurrency if max_concurrency is not None else self._config.enrich_concurrency
+        )
+
         if callback:
             callback(progress)
 
-        for i in range(0, len(nodes), batch_size):
-            batch = nodes[i : i + batch_size]
-            for node in batch:
-                try:
-                    result = self._enrich_single(node, force)
+        if not nodes:
+            return progress
+
+        progress_lock = threading.Lock()
+
+        def _worker(node: NodeData) -> dict:
+            return self._enrich_single(node, force)
+
+        def _on_completed(
+            node: NodeData,
+            result: dict | None,
+            exc: BaseException | None,
+        ) -> None:
+            with progress_lock:
+                if exc is not None:
+                    logger.error("Failed to enrich %s: %s", node.fqn, exc)
+                    progress.failed += 1
+                    progress.failed_nodes.append(node.fqn)
+                else:
+                    assert result is not None
                     if result.get("skipped"):
                         progress.skipped += 1
                     else:
                         progress.processed += 1
-                except Exception as e:
-                    logger.error("Failed to enrich %s: %s", node.fqn, e)
-                    progress.failed += 1
-                    progress.failed_nodes.append(node.fqn)
-
                 if callback:
                     callback(progress)
+
+        run_parallel(
+            nodes,
+            _worker,
+            max_concurrency=effective_concurrency,
+            on_completed=_on_completed,
+        )
 
         return progress
 
     def enrich_node(self, node_id: str, force: bool = False) -> dict:
         """Enrich a single node by node_id."""
-        self._init_pipelines()
         record = self._runner.execute_single(
             "MATCH (n:Node {node_id: $node_id}) RETURN n", node_id=node_id
         )
@@ -142,13 +224,13 @@ class Enricher:
 
     def _enrich_single(self, node: NodeData, force: bool) -> dict:
         """Enrich a single node with context-aware explanation + embeddings."""
-        from .pipelines import make_embed_documents
-
         if not force and self._has_explanation(node.node_id):
             logger.debug("Skipping %s (already enriched)", node.fqn)
             return {"skipped": True, "node_id": node.node_id, "fqn": node.fqn}
 
         logger.info("Enriching %s %s [%s]", node.kind, node.fqn, node.node_id)
+
+        pipes = self._get_pipelines()
 
         source = self._reader.read_node_source(node)
         if not source:
@@ -159,9 +241,9 @@ class Enricher:
 
         # Generate explanation with context
         if node.kind == "Method":
-            explanation = self._explain_method(node, source)
+            explanation = self._explain_method(node, source, pipes.method_explain)
         else:
-            explanation = self._explain_class(node, source)
+            explanation = self._explain_class(node, source, pipes.class_explain)
 
         llm_elapsed = time.perf_counter() - start
         if not explanation:
@@ -193,7 +275,7 @@ class Enricher:
             [c.content for c in chunks],
             [{**base_meta, "chunk_index": c.chunk_index} for c in chunks],
         )
-        self._code_embed_pipeline.run({"embedder": {"documents": code_docs}})
+        pipes.code_embed.run({"embedder": {"documents": code_docs}})
         logger.debug(
             "  Code embedding: %d chunk(s) in %.1fs", len(chunks), time.perf_counter() - embed_start
         )
@@ -201,7 +283,7 @@ class Enricher:
         # Embed explanation
         explain_start = time.perf_counter()
         explain_docs = make_embed_documents([explanation], [{**base_meta, "chunk_index": 0}])
-        self._explain_embed_pipeline.run({"embedder": {"documents": explain_docs}})
+        pipes.explain_embed.run({"embedder": {"documents": explain_docs}})
         logger.debug("  Explain embedding: 1 doc in %.1fs", time.perf_counter() - explain_start)
 
         elapsed = time.perf_counter() - start
@@ -218,16 +300,14 @@ class Enricher:
 
     # ── Method explanation with type context ─────────────────────
 
-    def _explain_method(self, node: NodeData, source: str) -> str:
+    def _explain_method(self, node: NodeData, source: str, pipeline: object) -> str:
         """Generate explanation for a method with argument/return type context."""
-        from .pipelines import run_explain_method
-
         type_context = self._gather_method_type_context(node)
         logger.debug("  Method type context: %d type(s)", len(type_context))
         for tc in type_context:
             logger.debug("    - %s %s (%d chars)", tc["kind"], tc["fqn"], len(tc["code"]))
         return run_explain_method(
-            self._method_explain_pipeline,
+            pipeline,
             source_code=source,
             fqn=node.fqn,
             signature=node.signature,
@@ -263,10 +343,8 @@ class Enricher:
 
     # ── Class explanation with parent + usage context ────────────
 
-    def _explain_class(self, node: NodeData, source: str) -> str:
+    def _explain_class(self, node: NodeData, source: str, pipeline: object) -> str:
         """Generate explanation for a class with inheritance and usage context."""
-        from .pipelines import run_explain_class
-
         parent_context = self._gather_class_parent_context(node)
         usage_context = self._gather_class_usage_context(node)
         logger.debug("  Class parent context: %d parent(s)", len(parent_context))
@@ -276,7 +354,7 @@ class Enricher:
         for uc in usage_context:
             logger.debug("    - %s %s (%d chars)", uc["kind"], uc["fqn"], len(uc["code"]))
         return run_explain_class(
-            self._class_explain_pipeline,
+            pipeline,
             source_code=source,
             fqn=node.fqn,
             parent_context=parent_context,
