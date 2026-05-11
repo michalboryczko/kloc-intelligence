@@ -64,29 +64,39 @@ def neo4j_connection(neo4j_config: Neo4jConfig):
     conn.close()
 
 
-SOT_FIXTURE_PATH = (
-    Path(__file__).parent.parent.parent / "artifacts" / "kloc-dev" / "context-final" / "sot.json"
+SOT_FIXTURE_PATH = _MONOREPO_ROOT / "artifacts" / "kloc-dev" / "context-final" / "sot.json"
+SOT_FIXTURE_WITH_VENDOR_PATH = (
+    _MONOREPO_ROOT / "artifacts" / "kloc-dev" / "context-rust-internal" / "sot.json"
 )
 
+# Tracks which dataset is currently in Neo4j so fixtures can skip redundant
+# reloads but force a reload when a test asks for a different dataset.
+_LOADED_DATASET_PATH: Path | None = None
 
-def _load_test_dataset(conn):
-    """Load the context-final test dataset into Neo4j.
+
+def _load_test_dataset(conn, path: Path = SOT_FIXTURE_PATH) -> int:
+    """Load the given sot.json into Neo4j (idempotent per dataset path).
 
     Skips the calling test when the fixture sot.json is missing — that file
     lives in the parent monorepo's gitignored artifacts/ tree and isn't
     bundled with the standalone repo, so CI environments hit the skip.
     """
+    global _LOADED_DATASET_PATH
     from src.db.importer import import_edges, import_nodes, parse_sot
     from src.db.schema import drop_all, ensure_schema
 
-    if not SOT_FIXTURE_PATH.is_file():
-        pytest.skip(f"Test dataset sot.json not available at {SOT_FIXTURE_PATH}")
+    if not path.is_file():
+        pytest.skip(f"Test dataset sot.json not available at {path}")
+
+    if path == _LOADED_DATASET_PATH and _db_has_data(conn):
+        return 0
 
     drop_all(conn)
     ensure_schema(conn)
-    nodes, edges = parse_sot(str(SOT_FIXTURE_PATH))
+    nodes, edges = parse_sot(str(path))
     import_nodes(conn, nodes)
     import_edges(conn, edges)
+    _LOADED_DATASET_PATH = path
     return len(nodes)
 
 
@@ -114,10 +124,18 @@ def _loaded_database_conn():
 
 @pytest.fixture
 def loaded_database(_loaded_database_conn):
-    """Provide a Neo4j connection with test data loaded.
+    """Neo4j connection with the App-only (context-final) dataset loaded."""
+    _load_test_dataset(_loaded_database_conn, SOT_FIXTURE_PATH)
+    return _loaded_database_conn
 
-    Reloads data if another test (e.g. test_import) cleared the database.
+
+@pytest.fixture
+def loaded_database_with_vendor(_loaded_database_conn):
+    """Neo4j connection with the vendor-inclusive (context-rust-internal) dataset.
+
+    Used by snapshot tests whose golden was captured against the kloc-cli
+    pipeline run with `--internal-all` (see tests/cases.json: `sot_id` =
+    "context-rust-internal", `internal_all: true`).
     """
-    if not _db_has_data(_loaded_database_conn):
-        _load_test_dataset(_loaded_database_conn)
+    _load_test_dataset(_loaded_database_conn, SOT_FIXTURE_WITH_VENDOR_PATH)
     return _loaded_database_conn

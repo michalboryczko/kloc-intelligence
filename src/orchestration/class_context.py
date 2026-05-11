@@ -535,7 +535,7 @@ def build_caller_chain_for_method(
         entries.append(entry)
 
     # Sort by (file, line) like kloc-cli
-    entries.sort(key=lambda e: (e.file or "", e.line if e.line is not None else 0))
+    entries.sort(key=lambda e: (e.file or "", e.line if e.line is not None else 0, e.fqn or ""))
     return entries
 
 
@@ -708,7 +708,7 @@ def build_class_used_by_depth_callers(
 
         entries.append(entry)
 
-    entries.sort(key=lambda e: (e.file or "", e.line if e.line is not None else 0))
+    entries.sort(key=lambda e: (e.file or "", e.line if e.line is not None else 0, e.fqn or ""))
     return entries
 
 
@@ -1297,7 +1297,7 @@ def build_class_used_by(
                     entry.children.append(child)
 
                 entry.children.sort(
-                    key=lambda e: (e.file or "", e.line if e.line is not None else 0)
+                    key=lambda e: (e.file or "", e.line if e.line is not None else 0, e.fqn or "")
                 )
 
         # Expand property_access entries with per-method children
@@ -1346,14 +1346,14 @@ def build_class_used_by(
 
                 method_children.append(child_entry)
 
-            method_children.sort(key=lambda e: (e.file or "", e.line if e.line is not None else 0))
+            method_children.sort(key=lambda e: (e.file or "", e.line if e.line is not None else 0, e.fqn or ""))
             entry.children = method_children
 
     # ------------------------------------------------------------------
     # Sort each bucket by (file, line) to match kloc-cli ordering
     # ------------------------------------------------------------------
     def _sort_key(e: ContextEntry) -> tuple:
-        return (e.file or "", e.line if e.line is not None else 0)
+        return (e.file or "", e.line if e.line is not None else 0, e.fqn or "")
 
     result_extends.sort(key=_sort_key)
     result_instantiation.sort(key=_sort_key)
@@ -1777,6 +1777,7 @@ def build_class_uses(
             e.file or "",
             e.line or 0,
             _ref_type_secondary.get(e.ref_type or "", 5),
+            e.fqn or "",
         )
     )
 
@@ -2073,6 +2074,7 @@ def build_class_uses_recursive(
             USES_PRIORITY.get(e.ref_type or "", 99),
             e.file or "",
             e.line or 0,
+            e.fqn or "",
         )
     )
 

@@ -82,8 +82,14 @@ class TestContextSnapshots:
         ids=_CASE_IDS,
     )
     @requires_neo4j
-    def test_context_query(self, loaded_database, case: dict):
-        """Run a context query and compare against the golden snapshot."""
+    def test_context_query(self, loaded_database_with_vendor, case: dict):
+        """Run a context query and compare against the golden snapshot.
+
+        The golden at SNAPSHOT_PATH was captured by the canonical kloc-cli
+        pipeline against the vendor-inclusive `context-rust-internal` dataset
+        (see tests/cases.json: `sot_id`, `internal_all`), so we load that
+        same fixture here.
+        """
         case_name = case["name"]
         symbol = case["symbol"]
         depth = case["depth"]
@@ -94,7 +100,7 @@ class TestContextSnapshots:
         expected = _SNAPSHOT[case_name]
 
         # Execute the query
-        actual = execute_context_query(loaded_database, symbol, depth, impl)
+        actual = execute_context_query(loaded_database_with_vendor, symbol, depth, impl)
 
         # Compare
         result = compare_snapshot(case_name, expected, actual)

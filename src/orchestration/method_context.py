@@ -743,7 +743,7 @@ def build_execution_flow(
     entries = filter_orphan_property_accesses(entries)
 
     # Sort by call line number
-    entries.sort(key=lambda e: (e.file or "", e.line if e.line is not None else 0))
+    entries.sort(key=lambda e: (e.file or "", e.line if e.line is not None else 0, e.fqn or ""))
 
     return entries
 

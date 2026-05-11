@@ -227,7 +227,7 @@ def build_property_callers_filtered(
         entries.append(entry)
 
     # Sort by (file, line)
-    entries.sort(key=lambda e: (e.file or "", e.line if e.line is not None else 0))
+    entries.sort(key=lambda e: (e.file or "", e.line if e.line is not None else 0, e.fqn or ""))
     return entries
 
 
@@ -443,5 +443,5 @@ def build_property_used_by(
         entries.append(entry)
 
     # Sort by (file, line)
-    entries.sort(key=lambda e: (e.file or "", e.line if e.line is not None else 0))
+    entries.sort(key=lambda e: (e.file or "", e.line if e.line is not None else 0, e.fqn or ""))
     return entries

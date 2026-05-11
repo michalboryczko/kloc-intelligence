@@ -670,7 +670,7 @@ def build_value_consumer_chain(
         entries.append(entry)
 
     # Sort all entries by (file, line)
-    entries.sort(key=lambda e: (e.file or "", e.line if e.line is not None else 0))
+    entries.sort(key=lambda e: (e.file or "", e.line if e.line is not None else 0, e.fqn or ""))
 
     return entries
 
@@ -1174,5 +1174,5 @@ def build_parameter_uses(
         entries.append(entry)
 
     # Sort by (file, line)
-    entries.sort(key=lambda e: (e.file or "", e.line if e.line is not None else 0))
+    entries.sort(key=lambda e: (e.file or "", e.line if e.line is not None else 0, e.fqn or ""))
     return entries

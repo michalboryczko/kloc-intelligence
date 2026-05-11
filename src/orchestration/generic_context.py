@@ -560,7 +560,7 @@ def build_generic_used_by(
             entries.append(entry)
 
         # R2: Sort by (file, line)
-        entries.sort(key=lambda e: (e.file or "", e.line if e.line is not None else 0))
+        entries.sort(key=lambda e: (e.file or "", e.line if e.line is not None else 0, e.fqn or ""))
 
         # Pass 2: expand children (R7/R8)
         if current_depth < max_depth:
