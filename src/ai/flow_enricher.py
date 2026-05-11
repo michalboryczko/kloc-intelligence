@@ -11,6 +11,7 @@ search can return flows alongside other code.
 """
 
 import logging
+import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -20,6 +21,7 @@ from ..db.query_runner import QueryRunner
 from ..db.result_mapper import record_to_node
 from ..models.node import NodeData
 from ..models.results import ContextEntry
+from ._parallel import ThreadLocalPipelines, run_parallel
 from .config import AIConfig
 from .source_reader import SourceReader
 
@@ -41,6 +43,14 @@ class FlowEnrichmentProgress:
     failed_flows: list[str] = field(default_factory=list)
 
 
+@dataclass
+class FlowPipelines:
+    """Per-thread set of flow pipelines."""
+
+    explain: object
+    embed: object
+
+
 class FlowEnricher:
     """Generate business-process summaries for :Flow nodes."""
 
@@ -48,46 +58,87 @@ class FlowEnricher:
         self._runner = runner
         self._config = config
         self._reader = SourceReader(config.project_root)
+        # Test-seam attributes — assigning to either overrides the thread-local
+        # set for that pipeline. See AC #20.
         self._explain_pipeline = None
         self._embed_pipeline = None
+        self._flow_pipelines: ThreadLocalPipelines[FlowPipelines] = ThreadLocalPipelines(
+            self._build_pipelines
+        )
 
-    def _init_pipelines(self):
-        if self._explain_pipeline is not None:
-            return
+    def _build_pipelines(self) -> FlowPipelines:
         from .pipelines import build_embed_pipeline, build_explain_flow_pipeline
 
-        self._explain_pipeline = build_explain_flow_pipeline(self._config)
-        self._embed_pipeline = build_embed_pipeline(self._config, "flow_explain_embeddings")
+        return FlowPipelines(
+            explain=build_explain_flow_pipeline(self._config),
+            embed=build_embed_pipeline(self._config, "flow_explain_embeddings"),
+        )
+
+    def _get_pipelines(self) -> FlowPipelines:
+        """Return the active flow pipelines for the current thread.
+
+        Instance attributes (set by tests via the documented seam) override the
+        thread-local set; missing attributes fall back to the thread-local
+        builder. This preserves the existing test pattern of
+        `enricher._explain_pipeline = MagicMock()`.
+        """
+        if self._explain_pipeline is None and self._embed_pipeline is None:
+            return self._flow_pipelines.get()
+        tl = (
+            self._flow_pipelines.get()
+            if self._explain_pipeline is None or self._embed_pipeline is None
+            else None
+        )
+        return FlowPipelines(
+            explain=self._explain_pipeline if self._explain_pipeline is not None else tl.explain,  # type: ignore[union-attr]
+            embed=self._embed_pipeline if self._embed_pipeline is not None else tl.embed,  # type: ignore[union-attr]
+        )
 
     def enrich_all_flows(
         self,
         force: bool = False,
         callback: Callable[[FlowEnrichmentProgress], None] | None = None,
+        *,
+        max_concurrency: int | None = None,
     ) -> FlowEnrichmentProgress:
-        self._init_pipelines()
+        concurrency = (
+            max_concurrency
+            if max_concurrency is not None
+            else self._config.enrich_flows_concurrency
+        )
         flows = self._fetch_flows(force)
         progress = FlowEnrichmentProgress(total=len(flows))
         if callback:
             callback(progress)
 
-        for flow in flows:
-            try:
-                result = self._enrich_one(flow, force)
-                if result.get("skipped"):
+        progress_lock = threading.Lock()
+
+        def _worker(flow: dict) -> dict:
+            return self._enrich_one(flow, force)
+
+        def _on_completed(flow: dict, result: dict | None, exc: BaseException | None) -> None:
+            with progress_lock:
+                if exc is not None:
+                    logger.error("Failed to enrich flow %s: %s", flow["flow_id"], exc)
+                    progress.failed += 1
+                    progress.failed_flows.append(flow["flow_id"])
+                elif result is not None and result.get("skipped"):
                     progress.skipped += 1
                 else:
                     progress.processed += 1
-            except Exception as e:
-                logger.error("Failed to enrich flow %s: %s", flow["flow_id"], e)
-                progress.failed += 1
-                progress.failed_flows.append(flow["flow_id"])
-            if callback:
-                callback(progress)
+                if callback:
+                    callback(progress)
+
+        run_parallel(
+            flows,
+            _worker,
+            max_concurrency=concurrency,
+            on_completed=_on_completed,
+        )
 
         return progress
 
     def enrich_flow(self, flow_id: str, force: bool = False) -> dict:
-        self._init_pipelines()
         record = self._runner.execute_single("MATCH (f:Flow {flow_id: $fid}) RETURN f", fid=flow_id)
         if not record or not record["f"]:
             return {"error": f"Flow not found: {flow_id}"}
@@ -109,6 +160,8 @@ class FlowEnricher:
         logger.info("Enriching flow %s", flow_id)
         start = time.perf_counter()
 
+        pipes = self._get_pipelines()
+
         method = self._fetch_entry_method(flow_id)
         if method is None:
             method = self._resolve_entry_method_fallback(flow)
@@ -129,7 +182,7 @@ class FlowEnricher:
         http_methods_str = ", ".join(http_methods) if http_methods else ""
 
         explanation = run_explain_flow(
-            self._explain_pipeline,
+            pipes.explain,
             flow_type=flow["type"],
             flow_name=flow["name"],
             entry_fqn=f"{flow.get('entry_fqn', '')}::{flow.get('entry_method', '')}".rstrip(":"),
@@ -160,7 +213,7 @@ class FlowEnricher:
             "chunk_index": 0,
         }
         docs = make_embed_documents([explanation], [meta])
-        self._embed_pipeline.run({"embedder": {"documents": docs}})
+        pipes.embed.run({"embedder": {"documents": docs}})
 
         elapsed = time.perf_counter() - start
         logger.info("  Done flow %s in %.1fs (refs=%d)", flow_id, elapsed, len(referenced))
