@@ -45,6 +45,8 @@ class AIConfig:
     project_root: str = ""
     project_name: str = "default"
     max_tokens_per_chunk: int = 8000
+    enrich_concurrency: int = 10
+    enrich_flows_concurrency: int = 10
 
     @classmethod
     def from_env(cls) -> "AIConfig":
@@ -64,6 +66,8 @@ class AIConfig:
             project_root=os.getenv("KLOC_PROJECT_ROOT", ""),
             project_name=os.getenv("KLOC_PROJECT_NAME", "default"),
             max_tokens_per_chunk=int(os.getenv("KLOC_MAX_TOKENS_PER_CHUNK", "8000")),
+            enrich_concurrency=int(os.getenv("ENRICH_CONCURRENCY", "10")),
+            enrich_flows_concurrency=int(os.getenv("ENRICH_FLOWS_CONCURRENCY", "10")),
         )
 
     def validate(self, *, require_llm: bool = True, require_embedding: bool = True) -> list[str]:
