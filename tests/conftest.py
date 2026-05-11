@@ -1,11 +1,33 @@
 """Shared test fixtures for kloc-intelligence."""
 
+import os
 from pathlib import Path
 
 import pytest
 
 from src.config import Neo4jConfig
 from src.db.connection import Neo4jConnection, Neo4jConnectionError
+
+# Monorepo layout assumes kloc-intelligence/ sits next to the other
+# sub-projects (kloc-reference-project-php, etc.) under a single parent.
+# `Path(__file__).parent.parent.parent` resolves to that parent.
+_MONOREPO_ROOT = Path(__file__).parent.parent.parent
+
+# Override paths via env vars when running outside the standard monorepo
+# layout. When the underlying file is missing, the test that depends on
+# it pytest.skips — no test bakes in `/Users/...` defaults.
+REFERENCE_PROJECT_ROOT = Path(
+    os.environ.get(
+        "KLOC_REFERENCE_PROJECT_ROOT",
+        str(_MONOREPO_ROOT / "kloc-reference-project-php"),
+    )
+)
+REFERENCE_SYMFONY_KLOC = Path(
+    os.environ.get(
+        "KLOC_REFERENCE_SYMFONY_KLOC",
+        str(REFERENCE_PROJECT_ROOT / ".kloc" / "symfony-kloc.json"),
+    )
+)
 
 
 def neo4j_is_available() -> bool:

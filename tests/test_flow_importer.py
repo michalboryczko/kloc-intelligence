@@ -8,7 +8,6 @@ the canonical `kloc-reference-project-php/.kloc/symfony-kloc.json` fixture
 import copy
 import json
 import logging
-from pathlib import Path
 
 import pytest
 
@@ -20,10 +19,14 @@ from src.db.flow_importer import (
     parse_flows,
 )
 
+from .conftest import REFERENCE_SYMFONY_KLOC as REFERENCE_FIXTURE
 from .conftest import requires_neo4j
 
-REFERENCE_FIXTURE = Path(
-    "/Users/michal/dev/ai/kloc/kloc-reference-project-php/.kloc/symfony-kloc.json"
+# Skip the whole module when the fixture is missing (any non-standard
+# monorepo layout, or CI without the PHP reference project on disk).
+pytestmark = pytest.mark.skipif(
+    not REFERENCE_FIXTURE.is_file(),
+    reason=f"Reference symfony-kloc.json not available at {REFERENCE_FIXTURE}",
 )
 
 ORDER_GET_FLOW_ID = "flow:http:App\\Ui\\Rest\\Controller\\OrderController::get"

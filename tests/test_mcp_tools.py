@@ -6,8 +6,6 @@ Verifies:
 - `kloc_flows` (added in the follow-up) supports list and detail modes.
 """
 
-from pathlib import Path
-
 import pytest
 
 from src.config import Neo4jConfig
@@ -21,6 +19,7 @@ from src.db.flow_importer import (
 )
 from src.server.mcp import MCPServer
 
+from .conftest import REFERENCE_SYMFONY_KLOC as REFERENCE_FIXTURE
 from .conftest import requires_neo4j
 
 REMOVED_TOOLS = ["kloc_explain_flow", "kloc_flow_diagram"]
@@ -31,9 +30,6 @@ NEW_IMPORT_FLOWS_DESCRIPTION = (
     "Replaces all existing flows on each call."
 )
 NEW_FLOWS_TOOL = "kloc_flows"
-REFERENCE_FIXTURE = Path(
-    "/Users/michal/dev/ai/kloc/kloc-reference-project-php/.kloc/symfony-kloc.json"
-)
 ORDER_CREATE_FLOW_ID = "flow:http:App\\Ui\\Rest\\Controller\\OrderController::create"
 
 

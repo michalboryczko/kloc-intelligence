@@ -5,7 +5,6 @@ integration was verified end-to-end during the kloc-intelligence-followups
 session: 9/9 reference-project flows enriched against native Gemini.
 """
 
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -29,18 +28,15 @@ from src.db.flow_importer import (
 )
 from src.db.query_runner import QueryRunner
 
-from .conftest import requires_neo4j
-
-REFERENCE_FIXTURE = Path(
-    "/Users/michal/dev/ai/kloc/kloc-reference-project-php/.kloc/symfony-kloc.json"
-)
+from .conftest import REFERENCE_PROJECT_ROOT, requires_neo4j
+from .conftest import REFERENCE_SYMFONY_KLOC as REFERENCE_FIXTURE
 
 
 def _make_config() -> AIConfig:
     return AIConfig(
         llm=LLMProviderConfig(api_key="test-key", model="test-llm"),
         embedding=EmbeddingProviderConfig(api_key="test-key", model="test-embed", dimension=8),
-        project_root="/Users/michal/dev/ai/kloc/kloc-reference-project-php",
+        project_root=str(REFERENCE_PROJECT_ROOT),
         project_name="test",
     )
 
