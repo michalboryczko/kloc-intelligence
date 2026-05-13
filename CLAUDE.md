@@ -180,6 +180,10 @@ labels for kind-scoped ones (faster, hits the kind-specific index).
   endpoint plus `_haystack_compat.py`.
 - Concurrency is env-driven: `ENRICH_CONCURRENCY` (default 10) for
   `enrich`, `ENRICH_FLOWS_CONCURRENCY` (default 10) for `enrich-flows`.
+- Symfony :Flow namespace filtering is env-driven: `KLOC_FLOW_NAMESPACES`
+  (comma-separated FQN-prefix allow-list, default `App\`). Loaded by
+  `flow_importer.load_flow_namespaces()`; consumed by `parse_v3`. Applies
+  to :Flow entries only — messages / events / http_clients are universal.
 - Gemini embedding dimension is 3072, OpenRouter qwen3-embedding-8b is
   4096. Switching providers means dropping the Qdrant collections
   (different dimensions can't coexist in one collection).

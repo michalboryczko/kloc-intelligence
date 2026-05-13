@@ -18,11 +18,14 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from src.db.flow_importer import (
+    DEFAULT_FLOW_NAMESPACES,
+    FLOW_NAMESPACES_ENV_VAR,
     ImportReport,
     _build_set_clause,
     _bulk_replace_edges,
     _delete_legacy_flow_triggers,
     _reconcile_nodes,
+    load_flow_namespaces,
     load_symfony_kloc,
     parse_v3,
     run_import,
@@ -321,6 +324,75 @@ class TestParseV3AppNamespaceFilter:
         )
         _, messages, _, _, _ = parse_v3(synthetic)
         assert len(messages) == 3
+
+
+# ---------------------------------------------------------------------------
+# Configurable namespace allow-list — unit tests
+# ---------------------------------------------------------------------------
+
+
+class TestFlowNamespacesConfig:
+    """KLOC_FLOW_NAMESPACES env var — comma-separated FQN prefix allow-list."""
+
+    def test_default_is_app_namespace(self, monkeypatch):
+        monkeypatch.delenv(FLOW_NAMESPACES_ENV_VAR, raising=False)
+        assert load_flow_namespaces() == DEFAULT_FLOW_NAMESPACES == ("App\\",)
+
+    def test_empty_env_falls_back_to_default(self, monkeypatch):
+        monkeypatch.setenv(FLOW_NAMESPACES_ENV_VAR, "   ")
+        assert load_flow_namespaces() == DEFAULT_FLOW_NAMESPACES
+
+    def test_single_custom_prefix(self, monkeypatch):
+        monkeypatch.setenv(FLOW_NAMESPACES_ENV_VAR, "Acme\\")
+        assert load_flow_namespaces() == ("Acme\\",)
+
+    def test_multiple_prefixes_with_whitespace(self, monkeypatch):
+        monkeypatch.setenv(FLOW_NAMESPACES_ENV_VAR, "App\\, Domain\\Orders\\,  Acme\\ ")
+        assert load_flow_namespaces() == ("App\\", "Domain\\Orders\\", "Acme\\")
+
+    def test_parse_v3_uses_env_when_no_override(self, monkeypatch, v3_data):
+        # Custom prefix that matches NONE of the canonical fixture flows
+        monkeypatch.setenv(FLOW_NAMESPACES_ENV_VAR, "Vendor\\")
+        flows, _, _, _, _ = parse_v3(v3_data)
+        assert flows == []  # all reference fixture flows are under App\
+
+    def test_parse_v3_explicit_override_ignores_env(self, monkeypatch, v3_data):
+        # Env says Vendor\, but explicit override says App\ — override wins
+        monkeypatch.setenv(FLOW_NAMESPACES_ENV_VAR, "Vendor\\")
+        flows, _, _, _, _ = parse_v3(v3_data, namespaces=("App\\",))
+        assert len(flows) == 10
+
+    def test_parse_v3_accepts_multi_prefix_keeping_both(self, v3_data):
+        # Append a synthetic flow under a different namespace; multi-prefix keeps both
+        synthetic = copy.deepcopy(v3_data)
+        synthetic["flows"].append(
+            {
+                "id": "flow:http:Acme\\Controller::index",
+                "type": "http",
+                "entry": {
+                    "fqn": "Acme\\Controller",
+                    "node_id": "node:acme_cls",
+                    "method": "index",
+                    "method_node_id": "node:acme_method",
+                    "route": "/acme",
+                    "http_methods": ["GET"],
+                },
+            }
+        )
+        flows, _, _, _, _ = parse_v3(synthetic, namespaces=("App\\", "Acme\\"))
+        ids = {f["flow_id"] for f in flows}
+        assert len(flows) == 11
+        assert "flow:http:Acme\\Controller::index" in ids
+
+    def test_parse_v3_messages_unaffected_by_namespace_filter(self, monkeypatch, v3_data):
+        # Even with a restrictive prefix that excludes all flows, the message/event/
+        # http_client node sets must still come through universally.
+        monkeypatch.setenv(FLOW_NAMESPACES_ENV_VAR, "Vendor\\")
+        flows, messages, events, http_clients, _ = parse_v3(v3_data)
+        assert flows == []
+        assert len(messages) == 2
+        assert len(events) == 2
+        assert len(http_clients) == 1
 
 
 # ---------------------------------------------------------------------------

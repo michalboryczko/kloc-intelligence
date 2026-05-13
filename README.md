@@ -118,6 +118,11 @@ EMBEDDING_DIMENSION=4096
 # Project metadata
 KLOC_PROJECT_ROOT=/path/to/php-project          # required for source / chunks / enrich
 KLOC_PROJECT_NAME=default
+
+# Symfony flow namespace filter (used by `import-flows`)
+# Comma-separated FQN prefixes; default `App\`. Messages / events / http_clients
+# are universal — this filter applies to :Flow entries only.
+# KLOC_FLOW_NAMESPACES=App\,Domain\Orders\,Acme\
 ```
 
 Native Google Gemini works out of the box via the OpenAI-compatible endpoint

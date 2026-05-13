@@ -17,6 +17,7 @@ Idempotency contract:
 
 import json
 import logging
+import os
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
@@ -24,7 +25,8 @@ from .connection import Neo4jConnection
 
 logger = logging.getLogger(__name__)
 
-APP_NAMESPACE = "App\\"
+DEFAULT_FLOW_NAMESPACES: tuple[str, ...] = ("App\\",)
+FLOW_NAMESPACES_ENV_VAR = "KLOC_FLOW_NAMESPACES"
 
 FLOW_PRESERVED_PROPS = frozenset({"explanation", "explain_model", "explain_at"})
 
@@ -40,10 +42,25 @@ def load_symfony_kloc(path: str | Path) -> dict:
         return json.load(f)
 
 
-def _is_app_flow(flow: dict) -> bool:
-    """True if the flow's entry FQN is in the App namespace."""
+def load_flow_namespaces() -> tuple[str, ...]:
+    """Load the :Flow namespace allow-list from ``KLOC_FLOW_NAMESPACES``.
+
+    Comma-separated list of FQN prefixes; whitespace around entries is
+    stripped. Empty / unset value falls back to :data:`DEFAULT_FLOW_NAMESPACES`
+    (``("App\\\\",)``). The filter applies only to ``:Flow`` entry FQNs;
+    messages/events/http_clients are always imported regardless of namespace.
+    """
+    raw = os.environ.get(FLOW_NAMESPACES_ENV_VAR, "").strip()
+    if not raw:
+        return DEFAULT_FLOW_NAMESPACES
+    parts = tuple(p.strip() for p in raw.split(",") if p.strip())
+    return parts or DEFAULT_FLOW_NAMESPACES
+
+
+def _flow_matches_namespaces(flow: dict, prefixes: tuple[str, ...]) -> bool:
+    """True if the flow's entry FQN starts with any allow-listed prefix."""
     fqn = flow.get("entry", {}).get("fqn", "")
-    return fqn.startswith(APP_NAMESPACE)
+    return any(fqn.startswith(p) for p in prefixes)
 
 
 def _derive_flow_name(flow_type: str, entry: dict) -> str:
@@ -86,19 +103,28 @@ def _flow_node_props(flow: dict) -> dict:
 
 def parse_v3(
     data: dict,
+    namespaces: tuple[str, ...] | None = None,
 ) -> tuple[list[dict], list[dict], list[dict], list[dict], dict[str, list[dict]]]:
     """Parse v3 symfony-kloc.json into desired node sets and edge tuples.
 
     Returns ``(flows, messages, events, http_clients, edges)`` where ``edges``
-    is keyed by edge-type string. Only App-namespace :Flow entries pass
-    through; messages/events/http_clients are universal.
+    is keyed by edge-type string. Only :Flow entries whose entry FQN starts
+    with one of the allow-listed namespace prefixes pass through;
+    messages/events/http_clients are universal (no namespace filter).
+
+    ``namespaces`` defaults to :func:`load_flow_namespaces` (env-driven,
+    fallback ``("App\\\\",)``). Pass an explicit tuple to override for tests.
     """
+    if namespaces is None:
+        namespaces = load_flow_namespaces()
+
     raw_flows = data.get("flows", []) or []
-    app_flows = [f for f in raw_flows if _is_app_flow(f)]
+    app_flows = [f for f in raw_flows if _flow_matches_namespaces(f, namespaces)]
     logger.info(
-        "Parsing v3 flows: %d total, %d App flows (filtered %d)",
+        "Parsing v3 flows: %d total, %d kept (namespaces=%s), %d filtered",
         len(raw_flows),
         len(app_flows),
+        ",".join(namespaces),
         len(raw_flows) - len(app_flows),
     )
 
