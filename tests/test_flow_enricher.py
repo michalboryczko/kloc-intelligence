@@ -1,8 +1,8 @@
-"""Tests for FlowEnricher (graph + context walk + explanation storage).
+"""Tests for FlowEnricher (graph + context walk + dispatch context + explanation storage).
 
-LLM and embedding calls are mocked so the test runs offline. The real
-integration was verified end-to-end during the kloc-intelligence-followups
-session: 9/9 reference-project flows enriched against native Gemini.
+LLM and embedding calls are mocked so the test runs offline. The new
+``_gather_dispatch_context`` method is exercised on the v3 reference fixture
+(``kloc-symfony/contract-tests/output/symfony-kloc.json``).
 """
 
 import threading
@@ -11,26 +11,27 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 haystack = pytest.importorskip("haystack", reason="ai extras not installed")
-from src.ai import pipelines  # ensure attribute lookup works for patch()
+
+from src.ai import pipelines as _pipelines
 from src.ai.config import AIConfig, EmbeddingProviderConfig, LLMProviderConfig
 from src.ai.flow_enricher import (
     FlowEnricher,
     FlowEnrichmentProgress,
     get_flow_enrichment_status,
 )
-from src.config import Neo4jConfig
-from src.db.connection import Neo4jConnection
-from src.db.flow_importer import (
-    clear_flows,
-    import_flow_edges,
-    import_flow_nodes,
-    load_symfony_kloc,
-    parse_flows,
-)
+from src.db.flow_importer import run_import
 from src.db.query_runner import QueryRunner
+from src.models.node import NodeData
 
-from .conftest import REFERENCE_PROJECT_ROOT, requires_neo4j
-from .conftest import REFERENCE_SYMFONY_KLOC as REFERENCE_FIXTURE
+from .conftest import REFERENCE_PROJECT_ROOT, REFERENCE_SYMFONY_KLOC_V3, requires_neo4j
+
+PAYMENT_VERIFY_FLOW_ID = "flow:http:App\\Ui\\Rest\\Controller\\PaymentController::verify"
+ORDER_EVENT_SUBSCRIBER_FLOW_ID = (
+    "flow:event:App\\Ui\\EventSubscriber\\OrderEventSubscriber::onOrderCreated[OrderCreatedEvent]"
+)
+ORDER_CREATE_FLOW_ID = "flow:http:App\\Ui\\Rest\\Controller\\OrderController::create"
+ORDER_GET_FLOW_ID = "flow:http:App\\Ui\\Rest\\Controller\\OrderController::get"
+CUSTOMER_GET_FLOW_ID = "flow:http:App\\Ui\\Rest\\Controller\\CustomerController::get"
 
 
 def _make_config() -> AIConfig:
@@ -43,34 +44,32 @@ def _make_config() -> AIConfig:
 
 
 @pytest.fixture(scope="module")
-def loaded_with_flows(_loaded_database_conn):
-    """Module-scoped fixture: reuse loaded test SoT + import the reference flows."""
+def loaded_with_v3_flows(_loaded_database_conn):
+    """Module-scoped fixture: reuse loaded test SoT + import the v3 reference flows."""
     conn = _loaded_database_conn
-    if not REFERENCE_FIXTURE.is_file():
-        pytest.skip(f"Reference fixture not found: {REFERENCE_FIXTURE}")
-    data = load_symfony_kloc(REFERENCE_FIXTURE)
-    nodes, edges = parse_flows(data)
-    clear_flows(conn)
-    import_flow_nodes(conn, nodes)
-    import_flow_edges(conn, edges)
+    if not REFERENCE_SYMFONY_KLOC_V3.is_file():
+        pytest.skip(f"Reference v3 fixture not found: {REFERENCE_SYMFONY_KLOC_V3}")
+    run_import(conn, REFERENCE_SYMFONY_KLOC_V3)
     yield conn
-    # cleanup explanations after module
     with conn.session() as s:
         s.run("MATCH (f:Flow) REMOVE f.explanation, f.explain_model, f.explain_at")
 
 
+# ── Status / smoke tests (Neo4j-backed) ─────────────────────────────
+
+
 @requires_neo4j
-def test_get_flow_enrichment_status_counts(loaded_with_flows):
-    status = get_flow_enrichment_status(loaded_with_flows)
-    assert status["total"] >= 5  # at least the http+message flows from reference
+def test_get_flow_enrichment_status_counts(loaded_with_v3_flows):
+    status = get_flow_enrichment_status(loaded_with_v3_flows)
+    assert status["total"] == 10
     assert status["enriched"] == 0
-    assert status["pending"] == status["total"]
+    assert status["pending"] == 10
 
 
 @requires_neo4j
-def test_enrich_flow_writes_explanation_property(loaded_with_flows):
+def test_enrich_flow_writes_explanation_property(loaded_with_v3_flows):
     """End-to-end with mocked LLM + embedder: explanation lands on the :Flow node."""
-    runner = QueryRunner(loaded_with_flows)
+    runner = QueryRunner(loaded_with_v3_flows)
     config = _make_config()
     enricher = FlowEnricher(runner, config)
 
@@ -82,32 +81,29 @@ def test_enrich_flow_writes_explanation_property(loaded_with_flows):
     with patch(
         "src.ai.pipelines.run_explain_flow", return_value="Creates new orders for customers."
     ):
-        flow_id = "flow:http:App\\Ui\\Rest\\Controller\\OrderController::create"
-        result = enricher.enrich_flow(flow_id, force=True)
+        result = enricher.enrich_flow(ORDER_CREATE_FLOW_ID, force=True)
 
     assert "error" not in result, result
-    assert result["flow_id"] == flow_id
+    assert result["flow_id"] == ORDER_CREATE_FLOW_ID
 
-    # Property persisted
     record = runner.execute_single(
         "MATCH (f:Flow {flow_id: $fid}) RETURN f.explanation AS expl, f.explain_model AS m",
-        fid=flow_id,
+        fid=ORDER_CREATE_FLOW_ID,
     )
     assert record["expl"] == "Creates new orders for customers."
     assert record["m"] == "test-llm"
 
-    # Embedder was invoked exactly once with the explanation as the document content
     assert embed_pipe.run.called
     docs = embed_pipe.run.call_args.args[0]["embedder"]["documents"]
     assert len(docs) == 1
     assert docs[0].content == "Creates new orders for customers."
-    assert docs[0].meta["flow_id"] == flow_id
+    assert docs[0].meta["flow_id"] == ORDER_CREATE_FLOW_ID
     assert docs[0].meta["kind"] == "Flow"
 
 
 @requires_neo4j
-def test_enrich_flow_unknown_id_returns_error(loaded_with_flows):
-    runner = QueryRunner(loaded_with_flows)
+def test_enrich_flow_unknown_id_returns_error(loaded_with_v3_flows):
+    runner = QueryRunner(loaded_with_v3_flows)
     enricher = FlowEnricher(runner, _make_config())
     enricher._explain_pipeline = MagicMock()
     enricher._embed_pipeline = MagicMock()
@@ -116,33 +112,42 @@ def test_enrich_flow_unknown_id_returns_error(loaded_with_flows):
 
 
 @requires_neo4j
-def test_enrich_flow_skips_when_already_enriched_without_force(loaded_with_flows):
-    runner = QueryRunner(loaded_with_flows)
+def test_enrich_flow_skips_when_already_enriched_without_force(loaded_with_v3_flows):
+    """AC #20 regression — pre-enriched flow returns ``{skipped: True}`` and
+    ``run_explain_flow`` is NOT called for it."""
+    runner = QueryRunner(loaded_with_v3_flows)
     config = _make_config()
     enricher = FlowEnricher(runner, config)
     enricher._explain_pipeline = MagicMock()
     enricher._embed_pipeline = MagicMock()
 
-    flow_id = "flow:http:App\\Ui\\Rest\\Controller\\OrderController::get"
     runner.execute(
         "MATCH (f:Flow {flow_id: $fid}) SET f.explanation = 'pre-existing'",
-        fid=flow_id,
+        fid=ORDER_GET_FLOW_ID,
     )
-    result = enricher.enrich_flow(flow_id, force=False)
-    assert result.get("skipped") is True
+    mock_run = MagicMock(return_value="ok")
+    with patch("src.ai.pipelines.run_explain_flow", mock_run):
+        result = enricher.enrich_flow(ORDER_GET_FLOW_ID, force=False)
+    assert result == {"skipped": True, "flow_id": ORDER_GET_FLOW_ID}
+    mock_run.assert_not_called()
     assert not enricher._embed_pipeline.run.called
+
+    runner.execute(
+        "MATCH (f:Flow {flow_id: $fid}) REMOVE f.explanation",
+        fid=ORDER_GET_FLOW_ID,
+    )
 
 
 @requires_neo4j
-def test_get_flow_enrichment_status_after_partial_enrichment(loaded_with_flows):
+def test_get_flow_enrichment_status_after_partial_enrichment(loaded_with_v3_flows):
     """After setting explanation on one flow, status counts move."""
-    with loaded_with_flows.session() as s:
+    with loaded_with_v3_flows.session() as s:
         s.run("MATCH (f:Flow) REMOVE f.explanation")
         s.run(
             "MATCH (f:Flow {flow_id: $fid}) SET f.explanation = 'x'",
-            fid="flow:http:App\\Ui\\Rest\\Controller\\CustomerController::get",
+            fid=CUSTOMER_GET_FLOW_ID,
         )
-    status = get_flow_enrichment_status(loaded_with_flows)
+    status = get_flow_enrichment_status(loaded_with_v3_flows)
     assert status["enriched"] == 1
     assert status["pending"] == status["total"] - 1
 
@@ -152,6 +157,255 @@ def test_progress_dataclass_defaults():
     assert p.total == 0
     assert p.processed == 0
     assert p.failed_flows == []
+
+
+# ── _gather_dispatch_context tests ──────────────────────────────────
+
+
+@requires_neo4j
+def test_gather_dispatch_context_payment_verify(loaded_with_v3_flows):
+    """``PaymentController::verify`` dispatches AuditLogMessage and calls paypal.client."""
+    runner = QueryRunner(loaded_with_v3_flows)
+    enricher = FlowEnricher(runner, _make_config())
+
+    ctx = enricher._gather_dispatch_context(PAYMENT_VERIFY_FLOW_ID)
+
+    assert any(m.get("fqn", "").endswith("AuditLogMessage") for m in ctx["emits_messages"]), ctx[
+        "emits_messages"
+    ]
+    assert ctx["emits_events"] == []
+    assert any(h.get("service_id") == "paypal.client" for h in ctx["http_calls"]), ctx["http_calls"]
+    assert any(h.get("base_uri") == "https://api.paypal.com" for h in ctx["http_calls"]), ctx[
+        "http_calls"
+    ]
+    assert ctx["triggered_by_messages"] == []
+    assert ctx["triggered_by_events"] == []
+
+
+@requires_neo4j
+def test_gather_dispatch_context_order_event_subscriber(loaded_with_v3_flows):
+    """``OrderEventSubscriber::onOrderCreated`` is triggered by OrderCreatedEvent."""
+    runner = QueryRunner(loaded_with_v3_flows)
+    enricher = FlowEnricher(runner, _make_config())
+
+    ctx = enricher._gather_dispatch_context(ORDER_EVENT_SUBSCRIBER_FLOW_ID)
+
+    assert ctx["emits_messages"] == []
+    assert ctx["emits_events"] == []
+    assert ctx["http_calls"] == []
+    assert ctx["triggered_by_messages"] == []
+    assert any(
+        e.get("fqn", "").endswith("OrderCreatedEvent") and e.get("priority") == 0
+        for e in ctx["triggered_by_events"]
+    ), ctx["triggered_by_events"]
+
+
+@requires_neo4j
+def test_gather_dispatch_context_flow_with_no_context(loaded_with_v3_flows):
+    """Flow with no EMITS / USES_HTTP_CLIENT / HANDLED_BY returns empty lists,
+    not ``[{fqn: null}]`` from the Cypher ``collect(DISTINCT ...)`` on a null edge."""
+    runner = QueryRunner(loaded_with_v3_flows)
+    enricher = FlowEnricher(runner, _make_config())
+
+    ctx = enricher._gather_dispatch_context(CUSTOMER_GET_FLOW_ID)
+
+    assert ctx == {
+        "emits_messages": [],
+        "emits_events": [],
+        "http_calls": [],
+        "triggered_by_messages": [],
+        "triggered_by_events": [],
+    }
+
+
+@requires_neo4j
+def test_gather_dispatch_context_unknown_flow_returns_empty(loaded_with_v3_flows):
+    runner = QueryRunner(loaded_with_v3_flows)
+    enricher = FlowEnricher(runner, _make_config())
+    ctx = enricher._gather_dispatch_context("flow:http:Nope::nope")
+    assert ctx == {
+        "emits_messages": [],
+        "emits_events": [],
+        "http_calls": [],
+        "triggered_by_messages": [],
+        "triggered_by_events": [],
+    }
+
+
+# ── AC #26 / #27 seam tests ─────────────────────────────────────────
+
+
+def _stub_entry_method() -> NodeData:
+    """Fake entry method NodeData — sidesteps the SoT-source dependency for AC #26/#27.
+
+    The v3 fixture references new code (PaymentController::verify,
+    OrderEventSubscriber) that the App-only test SoT does not contain. The
+    enrichment path needs entry-method source to build the prompt; we stub
+    it out so the test stays focused on the dispatch-context kwargs that
+    AC #26/#27 actually assert on.
+    """
+    return NodeData(
+        node_id="node:stub",
+        kind="Method",
+        name="stub",
+        fqn="App\\Stub::stub",
+        symbol="stub",
+        file="src/Stub.php",
+        start_line=0,
+        end_line=10,
+    )
+
+
+def _patch_enrich_one_source_deps(enricher: FlowEnricher):
+    """Context-manager-like helper: returns a tuple of patches to apply via ExitStack.
+
+    Patches the three source-dependent seams in ``_enrich_one`` so the
+    dispatch-context plumbing can be exercised without a fully-populated SoT.
+    """
+    return (
+        patch.object(enricher, "_fetch_entry_method", return_value=_stub_entry_method()),
+        patch.object(
+            enricher._reader,
+            "read_node_source",
+            return_value="public function stub() {}",
+        ),
+        patch.object(enricher, "_gather_context_chunks", return_value=[]),
+    )
+
+
+@requires_neo4j
+def test_payment_verify_prompt_kwargs_contain_paypal_and_audit(loaded_with_v3_flows):
+    """AC #26 — ``run_explain_flow.call_args.kwargs`` for PaymentController::verify
+    surfaces ``paypal.client``, ``https://api.paypal.com`` and ``AuditLogMessage``
+    via the structured context kwargs, and the rendered template echoes all three."""
+    runner = QueryRunner(loaded_with_v3_flows)
+    enricher = FlowEnricher(runner, _make_config())
+    enricher._explain_pipeline = MagicMock()
+    enricher._embed_pipeline = MagicMock()
+
+    mock_run = MagicMock(return_value="ok")
+    p_fetch, p_read, p_chunks = _patch_enrich_one_source_deps(enricher)
+    with (
+        p_fetch,
+        p_read,
+        p_chunks,
+        patch("src.ai.pipelines.run_explain_flow", mock_run),
+    ):
+        result = enricher.enrich_flow(PAYMENT_VERIFY_FLOW_ID, force=True)
+
+    assert "error" not in result, result
+    kwargs = mock_run.call_args.kwargs
+
+    emits_messages = kwargs["emits_messages"]
+    http_calls = kwargs["http_calls"]
+    assert any("AuditLogMessage" in (m.get("fqn") or "") for m in emits_messages), (
+        f"AuditLogMessage not in emits_messages: {emits_messages}"
+    )
+    assert any(h.get("service_id") == "paypal.client" for h in http_calls), (
+        f"paypal.client not in http_calls: {http_calls}"
+    )
+    assert any(h.get("base_uri") == "https://api.paypal.com" for h in http_calls), (
+        f"https://api.paypal.com not in http_calls: {http_calls}"
+    )
+
+    from jinja2 import Environment
+
+    from src.ai.pipelines import EXPLAIN_FLOW_TEMPLATE
+
+    rendered = Environment().from_string(EXPLAIN_FLOW_TEMPLATE).render(**kwargs)
+    for needle in ("paypal.client", "https://api.paypal.com", "AuditLogMessage"):
+        assert needle in rendered, f"prompt body missing {needle!r}\n{rendered}"
+
+
+@requires_neo4j
+def test_order_event_subscriber_prompt_kwargs_triggered_by_order_created_event(
+    loaded_with_v3_flows,
+):
+    """AC #27 — ``triggered_by_events`` kwarg for OrderEventSubscriber surfaces
+    OrderCreatedEvent and the rendered template includes a 'Triggered by' section."""
+    runner = QueryRunner(loaded_with_v3_flows)
+    enricher = FlowEnricher(runner, _make_config())
+    enricher._explain_pipeline = MagicMock()
+    enricher._embed_pipeline = MagicMock()
+
+    mock_run = MagicMock(return_value="ok")
+    p_fetch, p_read, p_chunks = _patch_enrich_one_source_deps(enricher)
+    with (
+        p_fetch,
+        p_read,
+        p_chunks,
+        patch("src.ai.pipelines.run_explain_flow", mock_run),
+    ):
+        result = enricher.enrich_flow(ORDER_EVENT_SUBSCRIBER_FLOW_ID, force=True)
+
+    assert "error" not in result, result
+    kwargs = mock_run.call_args.kwargs
+
+    triggered_by_events = kwargs["triggered_by_events"]
+    assert any("OrderCreatedEvent" in (e.get("fqn") or "") for e in triggered_by_events), (
+        f"OrderCreatedEvent not in triggered_by_events: {triggered_by_events}"
+    )
+
+    from jinja2 import Environment
+
+    from src.ai.pipelines import EXPLAIN_FLOW_TEMPLATE
+
+    rendered = Environment().from_string(EXPLAIN_FLOW_TEMPLATE).render(**kwargs)
+    assert "OrderCreatedEvent" in rendered
+    assert "Triggered by events" in rendered, (
+        f"rendered prompt missing 'Triggered by events' section heading:\n{rendered}"
+    )
+
+
+@requires_neo4j
+def test_empty_dispatch_context_renders_without_errors(loaded_with_v3_flows):
+    """Flow with empty context still renders a valid prompt (no Jinja errors)."""
+    runner = QueryRunner(loaded_with_v3_flows)
+    enricher = FlowEnricher(runner, _make_config())
+    enricher._explain_pipeline = MagicMock()
+    enricher._embed_pipeline = MagicMock()
+
+    mock_run = MagicMock(return_value="ok")
+    empty_ctx = {
+        "emits_messages": [],
+        "emits_events": [],
+        "http_calls": [],
+        "triggered_by_messages": [],
+        "triggered_by_events": [],
+    }
+    p_fetch, p_read, p_chunks = _patch_enrich_one_source_deps(enricher)
+    with (
+        p_fetch,
+        p_read,
+        p_chunks,
+        patch.object(enricher, "_gather_dispatch_context", return_value=empty_ctx),
+        patch("src.ai.pipelines.run_explain_flow", mock_run),
+    ):
+        result = enricher.enrich_flow(CUSTOMER_GET_FLOW_ID, force=True)
+
+    assert "error" not in result, result
+    kwargs = mock_run.call_args.kwargs
+    assert kwargs["emits_messages"] == []
+    assert kwargs["emits_events"] == []
+    assert kwargs["http_calls"] == []
+    assert kwargs["triggered_by_messages"] == []
+    assert kwargs["triggered_by_events"] == []
+
+    from jinja2 import Environment
+
+    from src.ai.pipelines import EXPLAIN_FLOW_TEMPLATE
+
+    rendered = Environment().from_string(EXPLAIN_FLOW_TEMPLATE).render(**kwargs)
+    for marker in (
+        "Dispatched messages",
+        "Dispatched events",
+        "External HTTP integrations",
+        "Triggered by messages",
+        "Triggered by events",
+    ):
+        assert marker not in rendered, (
+            f"empty-context rendering must omit {marker!r}, got:\n{rendered}"
+        )
 
 
 # ── Concurrency tests (no Neo4j) ─────────────────────────────────────
