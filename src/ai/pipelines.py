@@ -67,9 +67,11 @@ Output format — produce EXACTLY this structure, no markdown headers, no preamb
 
 <blank line>
 
-<Behavior — 2-3 sentences in business vocabulary describing what the flow accomplishes for the user or the business. Avoid implementation vocabulary (controller, repository, dispatcher, handler). Avoid class names and method names. Mention downstream side effects only if they're business-meaningful (e.g. "notifies the customer by email", not "dispatches NotifyCustomerEvent").>
+<Behavior — 2-3 sentences in business vocabulary describing what the flow accomplishes for the user or the business. Avoid implementation vocabulary (controller, repository, dispatcher, handler). Mention downstream side effects only if they're business-meaningful (e.g. "notifies the customer by email", not "dispatches NotifyCustomerEvent").>
 
 <Optional: one more line describing key downstream effects or related flows it kicks off, if relevant. Skip if there are no significant downstream effects.>
+
+When the flow dispatches messages or events, mention the message/event class names explicitly (e.g. "dispatches AuditLogMessage for compliance"). When the flow calls external HTTP services, mention the service name and base URI (e.g. "calls the PayPal API at https://api.paypal.com via paypal.client"). These concrete identifiers are what semantic search needs to match queries like "where do we call paypal api?" to the right flow.
 
 The output will be embedded for semantic search. Phrasings like "create an order", "process customer payments", "generate monthly reports", "notify users about failed deliveries" should match the corresponding flow."""
 
@@ -85,7 +87,32 @@ Flow name:        {{ flow_name }}
 {% endif %}{% if command_name %}Command name:     {{ command_name }}
 {% endif %}Entry FQN:        {{ entry_fqn }}
 {% if entry_file %}Entry file:       {{ entry_file }}{% endif %}
-
+{% if triggered_by_messages %}
+=== Triggered by messages ===
+{% for m in triggered_by_messages %}
+- {{ m.fqn }}
+{% endfor %}
+{% endif %}{% if triggered_by_events %}
+=== Triggered by events ===
+{% for e in triggered_by_events %}
+- {{ e.fqn }}{% if e.priority is not none %} (priority: {{ e.priority }}){% endif %}
+{% endfor %}
+{% endif %}{% if emits_messages %}
+=== Dispatched messages ===
+{% for m in emits_messages %}
+- {{ m.fqn }}{% if m.transports %} (transports: {{ m.transports | join(", ") }}){% endif %}{% if m.caller %} — dispatched from {{ m.caller }}{% endif %}
+{% endfor %}
+{% endif %}{% if emits_events %}
+=== Dispatched events ===
+{% for e in emits_events %}
+- {{ e.fqn }}{% if e.caller %} — dispatched from {{ e.caller }}{% endif %}
+{% endfor %}
+{% endif %}{% if http_calls %}
+=== External HTTP integrations ===
+{% for h in http_calls %}
+- {{ h.service_id }} -> {{ h.base_uri }}{% if h.class %} (class: {{ h.class }}){% endif %}{% if h.caller %} — called from {{ h.caller }}{% endif %}
+{% endfor %}
+{% endif %}
 === Entry method source ===
 ```php
 {{ entry_source }}
@@ -412,6 +439,12 @@ def run_explain_flow(
     command_name: str = "",
     entry_file: str = "",
     referenced_chunks: list[dict] | None = None,
+    *,
+    emits_messages: list[dict] | None = None,
+    emits_events: list[dict] | None = None,
+    http_calls: list[dict] | None = None,
+    triggered_by_messages: list[dict] | None = None,
+    triggered_by_events: list[dict] | None = None,
 ) -> str:
     """Run flow explain pipeline. Returns the LLM text."""
     variables = {
@@ -426,12 +459,23 @@ def run_explain_flow(
         "command_name": command_name,
         "entry_file": entry_file,
         "referenced_chunks": referenced_chunks or [],
+        "emits_messages": emits_messages or [],
+        "emits_events": emits_events or [],
+        "http_calls": http_calls or [],
+        "triggered_by_messages": triggered_by_messages or [],
+        "triggered_by_events": triggered_by_events or [],
     }
     logger.debug(
-        "  LLM call: flow explain for %s (entry_source=%d chars, refs=%d)",
+        "  LLM call: flow explain for %s (entry_source=%d chars, refs=%d, "
+        "emits_msgs=%d, emits_events=%d, http=%d, trig_msgs=%d, trig_events=%d)",
         flow_name,
         len(entry_source),
         len(referenced_chunks or []),
+        len(emits_messages or []),
+        len(emits_events or []),
+        len(http_calls or []),
+        len(triggered_by_messages or []),
+        len(triggered_by_events or []),
     )
     _render_and_log_prompt(
         [

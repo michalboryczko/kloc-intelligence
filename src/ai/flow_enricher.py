@@ -177,6 +177,7 @@ class FlowEnricher:
             raise ValueError(f"Cannot read entry source for flow {flow_id} (file: {method.file})")
 
         referenced = self._gather_context_chunks(method)
+        ctx = self._gather_dispatch_context(flow_id)
 
         http_methods = flow.get("http_methods") or []
         http_methods_str = ", ".join(http_methods) if http_methods else ""
@@ -194,6 +195,11 @@ class FlowEnricher:
             command_name=flow.get("command_name", "") or "",
             entry_file=method.file or "",
             referenced_chunks=referenced,
+            emits_messages=ctx["emits_messages"],
+            emits_events=ctx["emits_events"],
+            http_calls=ctx["http_calls"],
+            triggered_by_messages=ctx["triggered_by_messages"],
+            triggered_by_events=ctx["triggered_by_events"],
         )
         if not explanation:
             raise ValueError(f"Empty explanation for flow {flow_id}")
@@ -249,6 +255,50 @@ class FlowEnricher:
             "message_class": record.get("message_class"),
             "event_name": record.get("event_name"),
             "command_name": record.get("command_name"),
+        }
+
+    def _gather_dispatch_context(self, flow_id: str) -> dict:
+        """Gather both directions of the dispatch graph for ``flow_id``.
+
+        Returns a dict with five lists shaped per the v3 plan's interface contract.
+        Empty ``collect(DISTINCT ...)`` results in Cypher come back as a single-item
+        list with all-null fields; those are stripped here so the prompt template
+        receives clean empty lists.
+        """
+        cypher = """
+        MATCH (f:Flow {flow_id: $fid})
+        OPTIONAL MATCH (f)-[em:EMITS]->(m:Message)
+        OPTIONAL MATCH (f)-[ee:EMITS]->(e:Event)
+        OPTIONAL MATCH (f)-[uh:USES_HTTP_CLIENT]->(h:HttpClient)
+        OPTIONAL MATCH (mIn:Message)-[:HANDLED_BY]->(f)
+        OPTIONAL MATCH (eIn:Event)-[r:HANDLED_BY]->(f)
+        RETURN
+          collect(DISTINCT {fqn: m.fqn, transports: m.transports, caller: em.caller_method_fqn}) AS emits_messages,
+          collect(DISTINCT {fqn: e.fqn, caller: ee.caller_method_fqn})                            AS emits_events,
+          collect(DISTINCT {service_id: h.service_id, base_uri: h.base_uri, class: h.class_fqn,
+                            caller: uh.caller_method_fqn})                                        AS http_calls,
+          collect(DISTINCT {fqn: mIn.fqn})                                                        AS triggered_by_messages,
+          collect(DISTINCT {fqn: eIn.fqn, priority: r.priority})                                  AS triggered_by_events
+        """
+        record = self._runner.execute_single(cypher, fid=flow_id)
+        if record is None:
+            return {
+                "emits_messages": [],
+                "emits_events": [],
+                "http_calls": [],
+                "triggered_by_messages": [],
+                "triggered_by_events": [],
+            }
+
+        def _filter(items: list[dict], key: str) -> list[dict]:
+            return [it for it in (items or []) if it.get(key) is not None]
+
+        return {
+            "emits_messages": _filter(record["emits_messages"], "fqn"),
+            "emits_events": _filter(record["emits_events"], "fqn"),
+            "http_calls": _filter(record["http_calls"], "service_id"),
+            "triggered_by_messages": _filter(record["triggered_by_messages"], "fqn"),
+            "triggered_by_events": _filter(record["triggered_by_events"], "fqn"),
         }
 
     def _fetch_entry_method(self, flow_id: str) -> NodeData | None:
@@ -365,21 +415,6 @@ class FlowEnricher:
             explanation=explanation,
             model=self._config.llm.model,
         )
-
-
-def clear_flow_explain_collection(qdrant_url: str, qdrant_api_key: str | None = None) -> None:
-    """Drop the flow_explain_embeddings collection. Idempotent."""
-    try:
-        from qdrant_client import QdrantClient
-
-        client = QdrantClient(url=qdrant_url, api_key=qdrant_api_key)
-        try:
-            client.delete_collection("flow_explain_embeddings")
-        except Exception:
-            pass
-        client.close()
-    except Exception as exc:
-        logger.warning("Could not drop flow_explain_embeddings collection: %s", exc)
 
 
 def get_flow_enrichment_status(connection: Neo4jConnection) -> dict:
