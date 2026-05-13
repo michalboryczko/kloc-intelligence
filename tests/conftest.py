@@ -28,6 +28,12 @@ REFERENCE_SYMFONY_KLOC = Path(
         str(REFERENCE_PROJECT_ROOT / ".kloc" / "symfony-kloc.json"),
     )
 )
+REFERENCE_SYMFONY_KLOC_V3 = Path(
+    os.environ.get(
+        "KLOC_REFERENCE_SYMFONY_KLOC_V3",
+        str(_MONOREPO_ROOT / "kloc-symfony" / "contract-tests" / "output" / "symfony-kloc.json"),
+    )
+)
 
 
 def neo4j_is_available() -> bool:
