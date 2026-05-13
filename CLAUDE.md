@@ -29,14 +29,14 @@ sub-repos: `kloc-cli`, `kloc-mapper`, `kloc-indexer-php`, `scip-php`,
 ### Source code (`src/`)
 | Path | What lives there |
 | --- | --- |
-| `src/cli.py` | Typer entry point. 21 commands (3 schema + 18 top-level). Loads `.env` itself without overriding shell env. |
+| `src/cli.py` | Typer entry point. 24 commands (3 schema + 21 top-level, incl. `messages`/`events`/`http-clients`). Loads `.env` itself without overriding shell env. |
 | `src/config.py` | `Neo4jConfig.from_env()` — single source of truth for Neo4j env wiring. |
-| `src/server/mcp.py` | MCP JSON-RPC 2.0 stdio server with 16 tools (`kloc_resolve`, `kloc_context`, …). |
+| `src/server/mcp.py` | MCP JSON-RPC 2.0 stdio server with 22 tools (`kloc_resolve`, `kloc_context`, …, plus `kloc_messages`/`kloc_message`/`kloc_events`/`kloc_event`/`kloc_http_clients`/`kloc_http_client`). |
 | `src/db/connection.py` | Thin `neo4j` driver wrapper (`Neo4jConnection`). |
 | `src/db/query_runner.py` | Cypher executor with logging. Thread-safe. |
-| `src/db/schema.py` | `NODE_KINDS` (13), `EDGE_TYPES` (13), `INDEXES` (13), `CONSTRAINTS`. Touch this when the schema actually changes. |
+| `src/db/schema.py` | `NODE_KINDS` (13), `EDGE_TYPES` (13), `INDEXES` (16 incl. Message/Event/HttpClient), `CONSTRAINTS` (incl. `:Flow.flow_id`, `:Message.id`, `:Event.id`, `:HttpClient.id` uniqueness). Touch this when the schema actually changes. |
 | `src/db/importer.py` | `sot.json` → Neo4j (msgspec parsing, batched MERGE). |
-| `src/db/flow_importer.py` | `symfony-kloc.json` → `:Flow` nodes + `FLOW_ENTRY` / `FLOW_TRIGGERS`. |
+| `src/db/flow_importer.py` | `symfony-kloc.json` v3 → `:Flow` / `:Message` / `:Event` / `:HttpClient` via MERGE-reconcile. Preserves `:Flow.explanation` across re-imports; sweeps legacy `FLOW_TRIGGERS`; prunes orphan flow embeddings by `flow_id` filter via `flow_qdrant.delete_flow_embedding`. |
 | `src/db/queries/` | One module per structural query (`resolve`, `usages`, `deps`, `context_class`, `context_method`, `context_interface`, `context_property`, `context_value`, `context_class_uses`, `definition`, `inherit`, `overrides`, `owners`, `flows`, `helpers`). |
 | `src/orchestration/` | Kind-based tree builders. `context.py` dispatches on `kind` to `class_context.py` / `interface_context.py` / `method_context.py` / `property_context.py` / `value_context.py` / `generic_context.py`. `usages.py` / `deps.py` / `simple.py` for the simpler shapes. |
 | `src/logic/` | Pure logic: `handlers.py`, `reference_types.py`, `graph_helpers.py`, `polymorphic.py`, `definition.py`. No I/O. |
@@ -46,10 +46,11 @@ sub-repos: `kloc-cli`, `kloc-mapper`, `kloc-indexer-php`, `scip-php`,
 | `src/ai/_haystack_compat.py` | Tolerant embedders that handle Gemini's missing `usage` field. |
 | `src/ai/_parallel.py` | `ThreadPoolExecutor` runner + `ThreadLocalPipelines[T]` for concurrent enrichment. `QueryRunner` is thread-safe; `Pipeline` is not. |
 | `src/ai/enricher.py` | Class/Method enrichment orchestrator. Drives `_parallel.py`. |
-| `src/ai/flow_enricher.py` | `:Flow` business-process summary orchestrator. |
+| `src/ai/flow_enricher.py` | `:Flow` business-process summary orchestrator. Gathers v3 dispatch context (`emits_messages`, `emits_events`, `http_calls`, `triggered_by_messages`, `triggered_by_events`) and passes it as named kwargs to `run_explain_flow` — that call is the single test seam, don't pre-render upstream. |
+| `src/ai/flow_qdrant.py` | Per-flow Qdrant filter-delete (`delete_flow_embedding`) + symmetric scroll-based inspection helper (`list_flow_point_ids`). NEVER calls `delete_collection`. |
 | `src/ai/chunker.py` | Token-bounded chunking for large classes. |
 | `src/ai/source_reader.py` | File + line-range source reader. |
-| `src/output/` | Rich console (`console.py`) + JSON (`json_formatter.py`) formatters. |
+| `src/output/` | Rich console (`console.py`) + JSON (`json_formatter.py`) formatters. Flow / message / event / http-client renderers live in `output/flows.py`. |
 
 ### Tests, docs, infra
 | Path | Notes |
@@ -124,8 +125,16 @@ Skipping `import-flows` is fine; the rest of the pipeline still works.
 `type_hint`, `calls`, `receiver`, `argument`, `produces`, `assigned_from`,
 `type_of`, `return_type`.
 
-Plus `:Flow` nodes with `FLOW_ENTRY` (`:Flow → :Method`) and `FLOW_TRIGGERS`
-(`:Flow → :Flow`).
+Plus the Symfony-flow subgraph (v3 schema — `FLOW_TRIGGERS` is gone):
+- Nodes: `:Flow`, `:Message`, `:Event`, `:HttpClient`
+- Edges:
+  - `:Flow -[FLOW_ENTRY]-> :Method` and `:Flow -[FLOW_ENTRY_CLASS]-> :Class`
+  - `:Flow -[EMITS]-> :Message|:Event` (with `caller_method_fqn`, `call_node_id`)
+  - `:Call -[EMITS]-> :Message|:Event` (call-site mirror — same call_node_id; preserves duplicate dispatches)
+  - `:Flow -[USES_HTTP_CLIENT]-> :HttpClient` plus the `:Call -[USES_HTTP_CLIENT]-> :HttpClient` mirror
+  - `:Message|:Event -[HANDLED_BY]-> :Flow` (events carry `priority`)
+  - `:Message|:Event|:HttpClient -[OF_TYPE]-> :Class` (optional — absent for vendor classes like the PayPal HTTP client)
+- Re-import is idempotent. `:Flow.explanation`, `.explain_model`, `.explain_at` are NEVER overwritten by the importer. Orphan flow embeddings are filter-deleted from the `flow_explain_embeddings` Qdrant collection by `flow_id`; the collection itself is never dropped.
 
 `:Node` is a label every symbol carries; specialized labels (`:Class`,
 `:Method`, …) are stacked. Use `:Node` for cross-kind queries; use specific

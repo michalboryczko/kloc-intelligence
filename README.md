@@ -26,14 +26,17 @@ flow-level business summaries, semantic search) backed by Qdrant.
 
 ## Features
 
-- **16 commands** spanning schema management, structural traversal, source
-  reading, AI enrichment, and semantic search.
-- **Neo4j graph model** — 13 node kinds, 13 edge types, plus `:Flow` nodes
-  with `FLOW_ENTRY` / `FLOW_TRIGGERS` edges for Symfony app flows.
+- **22 commands** spanning schema management, structural traversal, source
+  reading, AI enrichment, semantic search, and Symfony flow surfaces
+  (messages / events / HTTP clients).
+- **Neo4j graph model** — 13 node kinds, 13 edge types, plus first-class
+  `:Flow`, `:Message`, `:Event`, `:HttpClient` nodes wired by
+  `FLOW_ENTRY`, `FLOW_ENTRY_CLASS`, `EMITS`, `USES_HTTP_CLIENT`,
+  `HANDLED_BY`, and `OF_TYPE` edges.
 - **Per-operation provider config** — point LLM and embeddings at any
   OpenAI-compatible endpoint independently (OpenRouter, Google Gemini,
   OpenAI, mixed).
-- **MCP server** — JSON-RPC 2.0 stdio protocol, 16 tools, multi-project
+- **MCP server** — JSON-RPC 2.0 stdio protocol, 22 tools, multi-project
   support.
 - **Contract-compliant output** — JSON matches the kloc-contracts schemas
   used by every other tool in the pipeline.
@@ -70,7 +73,7 @@ Detailed guides live under `docs/usage/kloc-intelligence/`:
 - [data-setup.md](../docs/usage/kloc-intelligence/data-setup.md) —
   pipeline order (import → flows → enrich → enrich-flows)
 - [cli.md](../docs/usage/kloc-intelligence/cli.md) — every CLI command
-- [mcp.md](../docs/usage/kloc-intelligence/mcp.md) — MCP server + 16 tools
+- [mcp.md](../docs/usage/kloc-intelligence/mcp.md) — MCP server + 22 tools
 
 ## Commands at a glance
 
@@ -79,6 +82,7 @@ Detailed guides live under `docs/usage/kloc-intelligence/`:
 | Schema | `schema ensure` · `schema verify` · `schema reset` |
 | Ingest | `import` · `import-flows` |
 | Structural | `resolve` · `owners` · `usages` · `deps` · `context` · `inherit` · `overrides` · `flows` |
+| Symfony entities | `messages` · `events` · `http-clients` |
 | Source | `source` · `chunks` |
 | AI | `enrich` · `enrich-status` · `enrich-flows` · `explain` · `search` |
 | Server | `mcp-server` |
@@ -129,15 +133,15 @@ src/
 ├── cli.py              # Typer entry point — every CLI command
 ├── config.py           # Neo4jConfig from env
 ├── server/
-│   └── mcp.py          # MCP server (JSON-RPC 2.0 over stdio), 16 tools
+│   └── mcp.py          # MCP server (JSON-RPC 2.0 over stdio), 22 tools
 ├── db/
 │   ├── connection.py   # Neo4j driver wrapper
 │   ├── query_runner.py # Cypher executor with logging
-│   ├── schema.py       # Constraints + 13 indexes
+│   ├── schema.py       # Constraints + 16 indexes (incl. Message/Event/HttpClient)
 │   ├── importer.py     # sot.json → Neo4j (msgspec parsing)
-│   ├── flow_importer.py# symfony-kloc.json → :Flow nodes + edges
+│   ├── flow_importer.py# symfony-kloc.json v3 → :Flow + :Message + :Event + :HttpClient via MERGE-reconcile
 │   ├── result_mapper.py# Record → NodeData
-│   └── queries/        # One module per structural query (resolve, deps, …)
+│   └── queries/        # One module per structural query (resolve, deps, …, flows)
 ├── orchestration/
 │   ├── context.py      # Kind-based dispatcher (Class/Method/Property/Value/…)
 │   ├── class_context.py / interface_context.py / method_context.py / …
@@ -153,17 +157,20 @@ src/
 │   ├── pipelines.py    # Haystack pipelines (explain / embed / search / flow)
 │   ├── _haystack_compat.py  # Tolerant embedders for Gemini's missing `usage`
 │   ├── enricher.py     # Class/Method enrichment orchestrator
-│   ├── flow_enricher.py# :Flow business-process summary orchestrator
+│   ├── flow_enricher.py# :Flow business-process summary orchestrator (v3 dispatch context)
+│   ├── flow_qdrant.py  # Per-flow Qdrant filter-delete + point-scroll utilities
 │   ├── chunker.py      # Token-bounded chunking for large classes
 │   └── source_reader.py# File + line-range source reader
-└── output/             # Rich console + JSON output formatters
+└── output/             # Rich console + JSON output formatters (incl. flows.py)
 ```
 
 ### Graph schema
 
 `:Node` carries every PHP symbol (`Class`, `Method`, `Interface`, `Property`,
 `Value`, `Call`, …). `:Flow` carries Symfony entry points (HTTP routes,
-message handlers, event subscribers, CLI commands).
+message handlers, event subscribers, CLI commands). `:Message`, `:Event`,
+and `:HttpClient` are first-class siblings of `:Flow` for dispatched
+messages, dispatched events, and outbound HTTP integrations respectively.
 
 | Relationship | Direction | Meaning |
 | --- | --- | --- |
@@ -181,11 +188,21 @@ message handlers, event subscribers, CLI commands).
 | `TYPE_OF` | value → type | Runtime type |
 | `RETURN_TYPE` | method → type | Return type declaration |
 | `FLOW_ENTRY` | flow → method | Symfony flow entry point |
-| `FLOW_TRIGGERS` | flow → flow | One flow dispatches a message/event another handles |
+| `FLOW_ENTRY_CLASS` | flow → class | Owning class for the entry method |
+| `EMITS` | flow / call → message / event | Outbound dispatch site |
+| `USES_HTTP_CLIENT` | flow / call → http_client | Outbound HTTP integration site |
+| `HANDLED_BY` | message / event → flow | Inbound dispatch handler (events carry `priority`) |
+| `OF_TYPE` | message / event / http_client → class | Optional class link (absent for vendor classes) |
 
 Indexes are created on `:Node.fqn` / `name` / `kind` / `symbol` / `file` /
 `explanation`, on `:Class.fqn` / `:Method.fqn` / `:Interface.fqn`, on
-`:Value.kind` and `:Call.kind`, and on `:Flow.flow_id` / `:Flow.type`.
+`:Value.kind` and `:Call.kind`, on `:Flow.flow_id` / `:Flow.type`, and on
+`:Message.fqn` / `:Event.fqn` / `:HttpClient.service_id`. Uniqueness
+constraints exist on `:Flow.flow_id`, `:Message.id`, `:Event.id`,
+`:HttpClient.id`. Re-importing `symfony-kloc.json` is **idempotent**:
+`:Flow.explanation` and the `flow_explain_embeddings` Qdrant collection
+survive structural-only changes; orphan flow embeddings are pruned by
+`flow_id` filter (the collection is never dropped).
 
 ### Qdrant collections
 
@@ -266,7 +283,7 @@ Wire into Claude Code's `~/.claude.json` (or any MCP-aware client):
 }
 ```
 
-The 16 tools then become callable as
+The 22 tools then become callable as
 `mcp__kloc-intelligence__kloc_context`, etc. See
 [mcp.md](../docs/usage/kloc-intelligence/mcp.md) for the full catalog.
 
