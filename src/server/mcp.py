@@ -358,8 +358,10 @@ class MCPServer:
             {
                 "name": "kloc_search",
                 "description": (
-                    "Semantic search across PHP codebase using natural language. "
-                    "Searches code embeddings and/or explanation embeddings."
+                    "Semantic search across the PHP codebase using natural language. "
+                    "Queries code embeddings, LLM explanations, and Symfony flow "
+                    "summaries; 'all' (default) merges and dedupes results from "
+                    "every collection."
                 ),
                 "inputSchema": {
                     "type": "object",
@@ -370,9 +372,13 @@ class MCPServer:
                         },
                         "collection": {
                             "type": "string",
-                            "enum": ["code", "explain", "both"],
-                            "description": "Which collection to search",
-                            "default": "both",
+                            "enum": ["code", "explain", "flows", "all"],
+                            "description": (
+                                "Which collection to search: 'code' (source-code "
+                                "embeddings), 'explain' (LLM explanations), 'flows' "
+                                "(Symfony flow summaries), or 'all' (merge all three)."
+                            ),
+                            "default": "all",
                         },
                         "limit": {
                             "type": "integer",
@@ -689,17 +695,24 @@ class MCPServer:
 
     def _handle_search(self, args: dict) -> dict:
         from ..ai.config import AIConfig
-        from ..ai.pipelines import build_search_pipeline, run_search, search_both_collections
+        from ..ai.pipelines import build_search_pipeline, run_search, search_all_collections
+        from ..cli import SEARCH_COLLECTION_MAP
 
         ai_config = AIConfig.from_env()
         query = args["query"]
         limit = args.get("limit", 10)
-        collection = args.get("collection", "both")
+        collection = args.get("collection", "all")
 
-        if collection == "both":
-            hits = search_both_collections(ai_config, query, limit=limit)
+        if collection != "all" and collection not in SEARCH_COLLECTION_MAP:
+            raise ValueError(
+                f"Invalid collection '{collection}'. "
+                f"Choose: code, explain, flows, all"
+            )
+
+        if collection == "all":
+            hits = search_all_collections(ai_config, query, limit=limit)
         else:
-            col_name = "code_embeddings" if collection == "code" else "explain_embeddings"
+            col_name = SEARCH_COLLECTION_MAP[collection]
             pipeline = build_search_pipeline(ai_config, col_name)
             hits = run_search(pipeline, query, top_k=limit)
             for h in hits:

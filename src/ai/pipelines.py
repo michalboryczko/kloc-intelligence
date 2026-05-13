@@ -451,12 +451,12 @@ ALL_SEARCH_COLLECTIONS = [
 ]
 
 
-def search_both_collections(
+def search_all_collections(
     config: AIConfig,
     query: str,
     limit: int = 10,
 ) -> list[dict]:
-    """Search all embedding collections, merge and deduplicate."""
+    """Search every embedding collection, merge and deduplicate by node_id."""
     all_hits = []
     for collection in ALL_SEARCH_COLLECTIONS:
         try:

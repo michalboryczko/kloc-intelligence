@@ -521,31 +521,48 @@ def explain(
     conn.close()
 
 
+SEARCH_COLLECTION_MAP = {
+    "code": "code_embeddings",
+    "explain": "explain_embeddings",
+    "flows": "flow_explain_embeddings",
+}
+
+
 @app.command()
 def search(
     query: str = typer.Argument(..., help="Natural language search query"),
     collection: str = typer.Option(
-        "both", "--collection", "-c", help="Search in: code, explain, both"
+        "all",
+        "--collection",
+        "-c",
+        help="Search in: code, explain, flows, all",
     ),
     limit: int = typer.Option(10, "--limit", "-l", help="Maximum results"),
     output_json: bool = typer.Option(False, "--json", "-j", help="Output as JSON"),
 ):
-    """Semantic search across code and explanations."""
+    """Semantic search across code, explanations, and flow summaries."""
     import json as json_mod
 
     _require_ai_deps()
     from .ai.config import AIConfig
-    from .ai.pipelines import build_search_pipeline, run_search, search_both_collections
+    from .ai.pipelines import build_search_pipeline, run_search, search_all_collections
+
+    if collection != "all" and collection not in SEARCH_COLLECTION_MAP:
+        console.print(
+            f"[red]Invalid --collection '{collection}'. "
+            f"Choose: code, explain, flows, all[/red]"
+        )
+        raise typer.Exit(1)
 
     ai_config = AIConfig.from_env()
     if not ai_config.embedding.api_key:
         console.print("[red]EMBEDDING_API_KEY is required for search[/red]")
         raise typer.Exit(1)
 
-    if collection == "both":
-        hits = search_both_collections(ai_config, query, limit=limit)
+    if collection == "all":
+        hits = search_all_collections(ai_config, query, limit=limit)
     else:
-        col_name = "code_embeddings" if collection == "code" else "explain_embeddings"
+        col_name = SEARCH_COLLECTION_MAP[collection]
         pipeline = build_search_pipeline(ai_config, col_name)
         hits = run_search(pipeline, query, top_k=limit)
         for h in hits:
