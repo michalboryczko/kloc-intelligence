@@ -417,16 +417,17 @@ class MCPServer:
             {
                 "name": "kloc_import_flows",
                 "description": (
-                    "Import symfony-kloc.json flows into Neo4j as :Flow nodes "
-                    "with FLOW_ENTRY and FLOW_TRIGGERS edges. "
-                    "Replaces all existing flows on each call."
+                    "Import symfony-kloc.json (v3) flows, messages, events, and "
+                    "HTTP clients into Neo4j. Idempotent: preserves "
+                    ":Flow.explanation across re-imports; deletes orphan Qdrant "
+                    "points by flow_id filter."
                 ),
                 "inputSchema": {
                     "type": "object",
                     "properties": {
                         "path": {
                             "type": "string",
-                            "description": "Path to symfony-kloc.json file",
+                            "description": "Path to symfony-kloc.json file (v3.0)",
                         },
                         "project": project_prop,
                     },
@@ -460,7 +461,8 @@ class MCPServer:
                 "description": (
                     "List or inspect Symfony application flows (HTTP/message/event/CLI). "
                     "Without flow_id, returns the list (optionally filtered by type). "
-                    "With flow_id, returns full detail with triggers in/out. "
+                    "With flow_id, returns full detail with dispatches_out "
+                    "(messages/events/http_clients) and dispatches_in (messages/events). "
                     "If flow_id partially matches multiple flows, returns candidates."
                 ),
                 "inputSchema": {
@@ -477,6 +479,100 @@ class MCPServer:
                         "project": project_prop,
                     },
                     "required": [],
+                },
+            },
+            {
+                "name": "kloc_messages",
+                "description": (
+                    "List all dispatched :Message entities with source-flow and "
+                    "target-flow counts. Returns rows: "
+                    "{id, fqn, transports, sources_count, targets_count}."
+                ),
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {"project": project_prop},
+                    "required": [],
+                },
+            },
+            {
+                "name": "kloc_message",
+                "description": (
+                    "Get detail for one :Message: dispatchers (sources with "
+                    "caller_method_fqn + call_node_id), handlers (target flows), "
+                    "transports, and OF_TYPE class if resolved."
+                ),
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "id": {
+                            "type": "string",
+                            "description": "Message id (e.g. message:App\\\\...) or partial match.",
+                        },
+                        "project": project_prop,
+                    },
+                    "required": ["id"],
+                },
+            },
+            {
+                "name": "kloc_events",
+                "description": (
+                    "List all dispatched :Event entities with source-flow and "
+                    "subscriber counts. Returns rows: "
+                    "{id, fqn, sources_count, targets_count}."
+                ),
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {"project": project_prop},
+                    "required": [],
+                },
+            },
+            {
+                "name": "kloc_event",
+                "description": (
+                    "Get detail for one :Event: dispatchers (sources), subscribers "
+                    "(targets with priority), and OF_TYPE class if resolved."
+                ),
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "id": {
+                            "type": "string",
+                            "description": "Event id (e.g. event:App\\\\...) or partial match.",
+                        },
+                        "project": project_prop,
+                    },
+                    "required": ["id"],
+                },
+            },
+            {
+                "name": "kloc_http_clients",
+                "description": (
+                    "List all outbound :HttpClient integrations with source-flow "
+                    "counts. Returns rows: "
+                    "{id, service_id, base_uri, class_fqn, sources_count}."
+                ),
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {"project": project_prop},
+                    "required": [],
+                },
+            },
+            {
+                "name": "kloc_http_client",
+                "description": (
+                    "Get detail for one :HttpClient: callers (sources), base_uri, "
+                    "class_fqn (resolved or vendor), and OF_TYPE class if resolved."
+                ),
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "id": {
+                            "type": "string",
+                            "description": "HTTP client id (e.g. http_client:paypal.client), service_id, or partial match.",
+                        },
+                        "project": project_prop,
+                    },
+                    "required": ["id"],
                 },
             },
             {
@@ -549,6 +645,12 @@ class MCPServer:
             "kloc_import_flows": self._handle_import_flows,
             "kloc_enrich_flows": self._handle_enrich_flows,
             "kloc_flows": self._handle_flows,
+            "kloc_messages": self._handle_messages,
+            "kloc_message": self._handle_message,
+            "kloc_events": self._handle_events,
+            "kloc_event": self._handle_event,
+            "kloc_http_clients": self._handle_http_clients,
+            "kloc_http_client": self._handle_http_client,
             "kloc_source": self._handle_source,
             "kloc_chunks": self._handle_chunks,
         }
@@ -705,8 +807,7 @@ class MCPServer:
 
         if collection != "all" and collection not in SEARCH_COLLECTION_MAP:
             raise ValueError(
-                f"Invalid collection '{collection}'. "
-                f"Choose: code, explain, flows, all"
+                f"Invalid collection '{collection}'. Choose: code, explain, flows, all"
             )
 
         if collection == "all":
@@ -768,13 +869,10 @@ class MCPServer:
         }
 
     def _handle_import_flows(self, args: dict) -> dict:
-        from ..db.flow_importer import (
-            clear_flows,
-            import_flow_edges,
-            import_flow_nodes,
-            load_symfony_kloc,
-            parse_flows,
-        )
+        import os
+        from dataclasses import asdict
+
+        from ..db.flow_importer import run_import
         from ..db.schema import ensure_schema
 
         project = args.get("project")
@@ -782,21 +880,13 @@ class MCPServer:
         conn = runner._connection
 
         ensure_schema(conn)
-        data = load_symfony_kloc(args["path"])
-        nodes, edges = parse_flows(data)
-        entry_count = sum(1 for e in edges if e["type"] == "flow_entry")
-        trigger_count = sum(1 for e in edges if e["type"] == "flow_triggers")
-
-        clear_flows(conn)
-        import_flow_nodes(conn, nodes)
-        import_flow_edges(conn, edges)
-
-        return {
-            "status": "ok",
-            "flows": len(nodes),
-            "flow_entry_edges": entry_count,
-            "flow_triggers_edges": trigger_count,
-        }
+        report = run_import(
+            conn,
+            args["path"],
+            os.environ.get("QDRANT_URL"),
+            os.environ.get("QDRANT_API_KEY"),
+        )
+        return {"status": "ok", **asdict(report)}
 
     def _handle_enrich_flows(self, args: dict) -> dict:
         from ..ai.config import AIConfig
@@ -864,6 +954,94 @@ class MCPServer:
             types = requested
 
         return {"mode": "list", "flows": list_flows(conn, type_filter=types)}
+
+    def _handle_messages(self, args: dict) -> dict:
+        from ..db.queries.flows import list_messages
+
+        project = args.get("project")
+        runner = self._get_runner(project)
+        conn = runner._connection
+        return {"mode": "list", "messages": list_messages(conn)}
+
+    def _handle_message(self, args: dict) -> dict:
+        from ..db.queries.flows import find_message, get_message_detail
+
+        project = args.get("project")
+        runner = self._get_runner(project)
+        conn = runner._connection
+
+        query = args["id"]
+        candidates = find_message(conn, query)
+        if not candidates:
+            return {"mode": "candidates", "candidates": []}
+        if len(candidates) == 1:
+            detail = get_message_detail(conn, candidates[0]["id"])
+            return {"mode": "detail", "message": detail}
+        return {
+            "mode": "candidates",
+            "candidates": [{"id": c["id"], "fqn": c["fqn"]} for c in candidates],
+        }
+
+    def _handle_events(self, args: dict) -> dict:
+        from ..db.queries.flows import list_events
+
+        project = args.get("project")
+        runner = self._get_runner(project)
+        conn = runner._connection
+        return {"mode": "list", "events": list_events(conn)}
+
+    def _handle_event(self, args: dict) -> dict:
+        from ..db.queries.flows import find_event, get_event_detail
+
+        project = args.get("project")
+        runner = self._get_runner(project)
+        conn = runner._connection
+
+        query = args["id"]
+        candidates = find_event(conn, query)
+        if not candidates:
+            return {"mode": "candidates", "candidates": []}
+        if len(candidates) == 1:
+            detail = get_event_detail(conn, candidates[0]["id"])
+            return {"mode": "detail", "event": detail}
+        return {
+            "mode": "candidates",
+            "candidates": [{"id": c["id"], "fqn": c["fqn"]} for c in candidates],
+        }
+
+    def _handle_http_clients(self, args: dict) -> dict:
+        from ..db.queries.flows import list_http_clients
+
+        project = args.get("project")
+        runner = self._get_runner(project)
+        conn = runner._connection
+        return {"mode": "list", "http_clients": list_http_clients(conn)}
+
+    def _handle_http_client(self, args: dict) -> dict:
+        from ..db.queries.flows import find_http_client, get_http_client_detail
+
+        project = args.get("project")
+        runner = self._get_runner(project)
+        conn = runner._connection
+
+        query = args["id"]
+        candidates = find_http_client(conn, query)
+        if not candidates:
+            return {"mode": "candidates", "candidates": []}
+        if len(candidates) == 1:
+            detail = get_http_client_detail(conn, candidates[0]["id"])
+            return {"mode": "detail", "http_client": detail}
+        return {
+            "mode": "candidates",
+            "candidates": [
+                {
+                    "id": c["id"],
+                    "service_id": c["service_id"],
+                    "base_uri": c["base_uri"],
+                }
+                for c in candidates
+            ],
+        }
 
     def _resolve_project_root(self, args: dict) -> str:
         from ..ai.config import AIConfig
