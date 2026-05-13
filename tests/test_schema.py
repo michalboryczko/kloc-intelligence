@@ -3,6 +3,7 @@
 from src.db.schema import (
     CONSTRAINTS,
     EDGE_TYPES,
+    FLOW_EDGE_TYPES,
     INDEXES,
     NODE_KINDS,
     drop_all,
@@ -30,6 +31,40 @@ def test_constraints_defined():
     assert "node_id_unique" in CONSTRAINTS
 
 
+def test_v3_flow_constraints_defined():
+    """v3 :Message/:Event/:HttpClient uniqueness constraints exist (AC #38)."""
+    assert "message_id_unique" in CONSTRAINTS
+    assert "event_id_unique" in CONSTRAINTS
+    assert "http_client_id_unique" in CONSTRAINTS
+
+
+def test_v3_flow_indexes_defined():
+    """v3 indexes on Message.fqn, Event.fqn, HttpClient.service_id exist (AC #39)."""
+    assert "message_fqn" in INDEXES
+    assert "event_fqn" in INDEXES
+    assert "http_client_service_id" in INDEXES
+
+
+def test_flow_edge_types_documents_v3_set():
+    """Flow edge types document the v3 set without FLOW_TRIGGERS."""
+    assert "FLOW_TRIGGERS" not in FLOW_EDGE_TYPES
+    for expected in (
+        "FLOW_ENTRY",
+        "FLOW_ENTRY_CLASS",
+        "EMITS",
+        "USES_HTTP_CLIENT",
+        "HANDLED_BY",
+        "OF_TYPE",
+    ):
+        assert expected in FLOW_EDGE_TYPES
+
+
+def test_flow_id_and_flow_type_indexes_intact():
+    """AC #39 — existing :Flow indexes survive the v3 schema additions."""
+    assert "flow_id" in INDEXES
+    assert "flow_type" in INDEXES
+
+
 def test_indexes_defined():
     """Test that the required indexes are defined."""
     expected = [
@@ -55,8 +90,42 @@ def test_indexes_defined():
 def test_ensure_schema(neo4j_connection):
     """Test that ensure_schema creates constraints and indexes."""
     result = ensure_schema(neo4j_connection)
-    assert result["constraints"] >= 1
+    assert result["constraints"] >= 4
     assert result["indexes"] >= 10
+
+
+@requires_neo4j
+def test_ensure_schema_creates_v3_constraints(neo4j_connection):
+    """SHOW CONSTRAINTS lists the v3 :Message/:Event/:HttpClient uniqueness rules."""
+    ensure_schema(neo4j_connection)
+    with neo4j_connection.session() as session:
+        rows = list(session.run("SHOW CONSTRAINTS"))
+    labels_seen = set()
+    for r in rows:
+        # Neo4j 5 surface: labelsOrTypes is a list of label strings
+        labels = r.get("labelsOrTypes") or []
+        for label in labels:
+            labels_seen.add(label)
+    assert "Message" in labels_seen
+    assert "Event" in labels_seen
+    assert "HttpClient" in labels_seen
+
+
+@requires_neo4j
+def test_ensure_schema_creates_v3_indexes(neo4j_connection):
+    """SHOW INDEXES lists the v3 fqn/service_id indexes plus the existing Flow ones."""
+    ensure_schema(neo4j_connection)
+    with neo4j_connection.session() as session:
+        rows = list(session.run("SHOW INDEXES"))
+    by_name = {r["name"]: r for r in rows if r.get("name")}
+    for expected in (
+        "flow_id",
+        "flow_type",
+        "message_fqn",
+        "event_fqn",
+        "http_client_service_id",
+    ):
+        assert expected in by_name, f"missing index {expected!r}"
 
 
 @requires_neo4j

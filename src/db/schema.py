@@ -34,9 +34,29 @@ EDGE_TYPES = [
     "return_type",
 ]
 
+# v3 :Flow-graph edge types (documentation-only; FLOW_TRIGGERS retired in v3).
+FLOW_EDGE_TYPES = [
+    "FLOW_ENTRY",
+    "FLOW_ENTRY_CLASS",
+    "EMITS",
+    "USES_HTTP_CLIENT",
+    "HANDLED_BY",
+    "OF_TYPE",
+]
+
 CONSTRAINTS = {
     "node_id_unique": (
         "CREATE CONSTRAINT node_id_unique IF NOT EXISTS FOR (n:Node) REQUIRE n.node_id IS UNIQUE"
+    ),
+    "message_id_unique": (
+        "CREATE CONSTRAINT message_id_unique IF NOT EXISTS FOR (n:Message) REQUIRE n.id IS UNIQUE"
+    ),
+    "event_id_unique": (
+        "CREATE CONSTRAINT event_id_unique IF NOT EXISTS FOR (n:Event) REQUIRE n.id IS UNIQUE"
+    ),
+    "http_client_id_unique": (
+        "CREATE CONSTRAINT http_client_id_unique IF NOT EXISTS "
+        "FOR (n:HttpClient) REQUIRE n.id IS UNIQUE"
     ),
 }
 
@@ -54,6 +74,11 @@ INDEXES = {
     "node_explanation": "CREATE INDEX node_explanation IF NOT EXISTS FOR (n:Node) ON (n.explanation)",
     "flow_id": "CREATE INDEX flow_id IF NOT EXISTS FOR (n:Flow) ON (n.flow_id)",
     "flow_type": "CREATE INDEX flow_type IF NOT EXISTS FOR (n:Flow) ON (n.type)",
+    "message_fqn": "CREATE INDEX message_fqn IF NOT EXISTS FOR (n:Message) ON (n.fqn)",
+    "event_fqn": "CREATE INDEX event_fqn IF NOT EXISTS FOR (n:Event) ON (n.fqn)",
+    "http_client_service_id": (
+        "CREATE INDEX http_client_service_id IF NOT EXISTS FOR (n:HttpClient) ON (n.service_id)"
+    ),
 }
 
 
