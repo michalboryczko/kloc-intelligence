@@ -1,7 +1,8 @@
 """Smoke test for the CLI command list.
 
 Verifies the post-flow-demolition surface: the legacy `flow-diagram` and
-`explain-flow` commands are gone, and `import-flows` is still present.
+`explain-flow` commands are gone, and the v3 flow commands are present:
+`import-flows`, `flows`, `enrich-flows`, `messages`, `events`, `http-clients`.
 """
 
 from typer.testing import CliRunner
@@ -9,7 +10,14 @@ from typer.testing import CliRunner
 from src.cli import app
 
 REMOVED_COMMANDS = ["flow-diagram", "explain-flow"]
-KEPT_COMMANDS = ["import-flows", "flows", "enrich-flows"]
+KEPT_COMMANDS = [
+    "import-flows",
+    "flows",
+    "enrich-flows",
+    "messages",
+    "events",
+    "http-clients",
+]
 
 
 def test_kloc_help_does_not_list_removed_commands():
