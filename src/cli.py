@@ -549,8 +549,7 @@ def search(
 
     if collection != "all" and collection not in SEARCH_COLLECTION_MAP:
         console.print(
-            f"[red]Invalid --collection '{collection}'. "
-            f"Choose: code, explain, flows, all[/red]"
+            f"[red]Invalid --collection '{collection}'. Choose: code, explain, flows, all[/red]"
         )
         raise typer.Exit(1)
 
@@ -781,23 +780,18 @@ def enrich_status(
 
 @app.command("import-flows")
 def import_flows(
-    path: str = typer.Argument(..., help="Path to symfony-kloc.json"),
+    path: str = typer.Argument(..., help="Path to symfony-kloc.json (v3.0)"),
 ):
-    """Import symfony-kloc.json flows into Neo4j as :Flow nodes with FLOW_ENTRY and FLOW_TRIGGERS edges.
+    """Import symfony-kloc.json (v3) flows, messages, events, and HTTP clients into Neo4j.
 
-    Replaces all existing flows on each call.
+    Idempotent: preserves :Flow.explanation across re-imports; deletes orphan
+    Qdrant points by flow_id filter.
     """
     import time as time_mod
 
     from .config import Neo4jConfig
     from .db.connection import Neo4jConnection
-    from .db.flow_importer import (
-        clear_flows,
-        import_flow_edges,
-        import_flow_nodes,
-        load_symfony_kloc,
-        parse_flows,
-    )
+    from .db.flow_importer import run_import
     from .db.schema import ensure_schema
 
     config = Neo4jConfig.from_env()
@@ -807,28 +801,37 @@ def import_flows(
 
     ensure_schema(conn)
 
-    console.print(f"Parsing {path}...")
-    data = load_symfony_kloc(path)
-    nodes, edges = parse_flows(data)
-    entry_count = sum(1 for e in edges if e["type"] == "flow_entry")
-    trigger_count = sum(1 for e in edges if e["type"] == "flow_triggers")
-    console.print(
-        f"  Parsed {len(nodes)} flow nodes, {entry_count} FLOW_ENTRY edges, "
-        f"{trigger_count} FLOW_TRIGGERS edges"
-    )
+    qdrant_url = os.environ.get("QDRANT_URL")
+    qdrant_api_key = os.environ.get("QDRANT_API_KEY")
 
-    console.print("Clearing existing flows...")
-    clear_flows(conn)
-
-    console.print("Importing flow nodes...")
-    import_flow_nodes(conn, nodes)
-    console.print("Importing flow edges...")
-    import_flow_edges(conn, edges)
+    console.print(f"Importing {path}...")
+    report = run_import(conn, path, qdrant_url, qdrant_api_key)
 
     total = time_mod.perf_counter() - start
     console.print(
-        f"\n[green]Imported {len(nodes)} flows, {entry_count} FLOW_ENTRY edges, "
-        f"{trigger_count} FLOW_TRIGGERS edges in {total:.1f}s[/green]"
+        f"\n[green]Imported v3 flows in {total:.1f}s[/green]\n"
+        f"  Flows:        {report.flows_upserted} upserted, {report.flows_deleted} deleted\n"
+        f"  Messages:     {report.messages_upserted} upserted, "
+        f"{report.messages_deleted} deleted\n"
+        f"  Events:       {report.events_upserted} upserted, "
+        f"{report.events_deleted} deleted\n"
+        f"  HTTP clients: {report.http_clients_upserted} upserted, "
+        f"{report.http_clients_deleted} deleted\n"
+        f"  FLOW_ENTRY edges:        {report.flow_entry_edges}\n"
+        f"  FLOW_ENTRY_CLASS edges:  {report.flow_entry_class_edges}\n"
+        f"  EMITS (Flow→Message):    {report.emits_flow_message_edges}\n"
+        f"  EMITS (Flow→Event):      {report.emits_flow_event_edges}\n"
+        f"  EMITS (Call→Message):    {report.emits_call_message_edges}\n"
+        f"  EMITS (Call→Event):      {report.emits_call_event_edges}\n"
+        f"  USES_HTTP_CLIENT (Flow): {report.uses_http_flow_edges}\n"
+        f"  USES_HTTP_CLIENT (Call): {report.uses_http_call_edges}\n"
+        f"  HANDLED_BY (Message):    {report.handled_by_message_edges}\n"
+        f"  HANDLED_BY (Event):      {report.handled_by_event_edges}\n"
+        f"  OF_TYPE (Message):       {report.of_type_message_edges}\n"
+        f"  OF_TYPE (Event):         {report.of_type_event_edges}\n"
+        f"  OF_TYPE (HttpClient):    {report.of_type_http_edges}\n"
+        f"  Qdrant points deleted:   {report.qdrant_points_deleted}\n"
+        f"  Legacy FLOW_TRIGGERS removed: {report.legacy_flow_triggers_deleted}"
     )
     conn.close()
 
@@ -856,6 +859,11 @@ def flows(
         find_flow,
         get_flow_detail,
         list_flows,
+    )
+    from .output.flows import (
+        print_flow_candidates,
+        print_flow_detail,
+        print_flows_list,
     )
 
     config = Neo4jConfig.from_env()
@@ -900,69 +908,191 @@ def flows(
     if output_json:
         print(json_mod.dumps(result, indent=2))
     elif result["mode"] == "list":
-        rows = result["flows"]
-        if not rows:
-            console.print("[yellow]No flows found.[/yellow]")
-        else:
-            table = Table(title=f"Flows ({len(rows)})")
-            table.add_column("Type", style="cyan")
-            table.add_column("Name", style="green")
-            table.add_column("Entry FQN", style="yellow")
-            table.add_column("Flow ID", style="dim")
-            for f in rows:
-                table.add_row(f["type"], f["name"], f["entry_fqn"], f["flow_id"])
-            console.print(table)
+        print_flows_list(result["flows"])
     elif result["mode"] == "candidates":
-        cands = result["candidates"]
-        if not cands:
-            console.print(f"[yellow]No flows match '{query}'.[/yellow]")
-        else:
-            console.print(f"[bold]Multiple matches for '{query}':[/bold]")
-            table = Table()
-            table.add_column("Type", style="cyan")
-            table.add_column("Name", style="green")
-            table.add_column("Flow ID", style="dim")
-            for c in cands:
-                table.add_row(c["type"], c["name"], c["flow_id"])
-            console.print(table)
+        print_flow_candidates(query or "", result["candidates"])
     else:
-        flow = result["flow"]
-        console.print(f"\n[bold]{flow['name']}[/bold] ([cyan]{flow['type']}[/cyan])")
-        console.print(f"[dim]flow_id:[/dim] {flow['flow_id']}")
-        entry = flow["entry"]
-        loc = entry.get("file") or "<unknown>"
-        if entry.get("start_line") and entry.get("end_line"):
-            loc = f"{loc}:{entry['start_line']}-{entry['end_line']}"
-        console.print(f"[dim]entry:[/dim]   {entry['fqn']}  [dim]{loc}[/dim]")
-        if flow["type"] == "http":
-            console.print(
-                f"[dim]route:[/dim]   {flow.get('route', '')} {' '.join(flow.get('http_methods', []))}"
-            )
-        elif flow["type"] == "message":
-            console.print(f"[dim]message:[/dim] {flow.get('message_class', '')}")
-        elif flow["type"] == "event":
-            console.print(f"[dim]event:[/dim]   {flow.get('event_name', '')}")
-        elif flow["type"] == "cli":
-            console.print(f"[dim]command:[/dim] {flow.get('command_name', '')}")
-        if flow.get("explanation"):
-            console.print(f"\n[bold]Summary:[/bold] {flow['explanation']}")
-            model = flow.get("explain_model", "")
-            if model:
-                console.print(f"[dim]({model})[/dim]")
-        if flow["triggers_out"]:
-            console.print(f"\n[bold]Triggers out ({len(flow['triggers_out'])}):[/bold]")
-            for t in flow["triggers_out"]:
-                console.print(
-                    f"  → [cyan]{t['trigger_type']}[/cyan] via [yellow]{t['via']}[/yellow] → {t['target_name']} [dim]({t['target_flow_id']})[/dim]"
-                )
-        if flow["triggers_in"]:
-            console.print(f"\n[bold]Triggers in ({len(flow['triggers_in'])}):[/bold]")
-            for t in flow["triggers_in"]:
-                console.print(
-                    f"  ← [cyan]{t['trigger_type']}[/cyan] via [yellow]{t['via']}[/yellow] ← {t['source_name']} [dim]({t['source_flow_id']})[/dim]"
-                )
-        if not flow["triggers_out"] and not flow["triggers_in"]:
-            console.print("\n[dim](no triggers)[/dim]")
+        print_flow_detail(result["flow"])
+
+    conn.close()
+
+
+@app.command()
+def messages(
+    query: str = typer.Argument(None, help="Optional message id, partial match, or FQN"),
+    output_json: bool = typer.Option(False, "--json", "-j", help="Output as JSON"),
+):
+    """List or inspect dispatched :Message entities.
+
+    No argument lists all :Message nodes with source and target flow counts.
+    With an argument, returns full detail for an exact id, or a candidate list
+    when the query partially matches multiple messages.
+    """
+    import json as json_mod
+
+    from .config import Neo4jConfig
+    from .db.connection import Neo4jConnection
+    from .db.queries.flows import (
+        find_message,
+        get_message_detail,
+        list_messages,
+    )
+    from .output.flows import (
+        print_message_candidates,
+        print_message_detail,
+        print_messages_list,
+    )
+
+    config = Neo4jConfig.from_env()
+    conn = Neo4jConnection(config)
+    conn.verify_connectivity()
+
+    if query is None:
+        result = {"mode": "list", "messages": list_messages(conn)}
+    else:
+        candidates = find_message(conn, query)
+        if len(candidates) == 0:
+            result = {"mode": "candidates", "candidates": []}
+        elif len(candidates) == 1:
+            detail = get_message_detail(conn, candidates[0]["id"])
+            result = {"mode": "detail", "message": detail}
+        else:
+            result = {
+                "mode": "candidates",
+                "candidates": [{"id": c["id"], "fqn": c["fqn"]} for c in candidates],
+            }
+
+    if output_json:
+        print(json_mod.dumps(result, indent=2))
+    elif result["mode"] == "list":
+        print_messages_list(result["messages"])
+    elif result["mode"] == "candidates":
+        print_message_candidates(query or "", result["candidates"])
+    else:
+        print_message_detail(result["message"])
+
+    conn.close()
+
+
+@app.command()
+def events(
+    query: str = typer.Argument(None, help="Optional event id, partial match, or FQN"),
+    output_json: bool = typer.Option(False, "--json", "-j", help="Output as JSON"),
+):
+    """List or inspect dispatched :Event entities.
+
+    No argument lists all :Event nodes with source and target flow counts.
+    With an argument, returns full detail for an exact id, or a candidate list
+    when the query partially matches multiple events.
+    """
+    import json as json_mod
+
+    from .config import Neo4jConfig
+    from .db.connection import Neo4jConnection
+    from .db.queries.flows import (
+        find_event,
+        get_event_detail,
+        list_events,
+    )
+    from .output.flows import (
+        print_event_candidates,
+        print_event_detail,
+        print_events_list,
+    )
+
+    config = Neo4jConfig.from_env()
+    conn = Neo4jConnection(config)
+    conn.verify_connectivity()
+
+    if query is None:
+        result = {"mode": "list", "events": list_events(conn)}
+    else:
+        candidates = find_event(conn, query)
+        if len(candidates) == 0:
+            result = {"mode": "candidates", "candidates": []}
+        elif len(candidates) == 1:
+            detail = get_event_detail(conn, candidates[0]["id"])
+            result = {"mode": "detail", "event": detail}
+        else:
+            result = {
+                "mode": "candidates",
+                "candidates": [{"id": c["id"], "fqn": c["fqn"]} for c in candidates],
+            }
+
+    if output_json:
+        print(json_mod.dumps(result, indent=2))
+    elif result["mode"] == "list":
+        print_events_list(result["events"])
+    elif result["mode"] == "candidates":
+        print_event_candidates(query or "", result["candidates"])
+    else:
+        print_event_detail(result["event"])
+
+    conn.close()
+
+
+@app.command("http-clients")
+def http_clients(
+    query: str = typer.Argument(
+        None, help="Optional http_client id, service_id, partial match, or class FQN"
+    ),
+    output_json: bool = typer.Option(False, "--json", "-j", help="Output as JSON"),
+):
+    """List or inspect outbound :HttpClient integrations.
+
+    No argument lists all :HttpClient nodes with source flow counts.
+    With an argument, returns full detail for an exact id/service_id, or a
+    candidate list when the query partially matches multiple HTTP clients.
+    """
+    import json as json_mod
+
+    from .config import Neo4jConfig
+    from .db.connection import Neo4jConnection
+    from .db.queries.flows import (
+        find_http_client,
+        get_http_client_detail,
+        list_http_clients,
+    )
+    from .output.flows import (
+        print_http_client_candidates,
+        print_http_client_detail,
+        print_http_clients_list,
+    )
+
+    config = Neo4jConfig.from_env()
+    conn = Neo4jConnection(config)
+    conn.verify_connectivity()
+
+    if query is None:
+        result = {"mode": "list", "http_clients": list_http_clients(conn)}
+    else:
+        candidates = find_http_client(conn, query)
+        if len(candidates) == 0:
+            result = {"mode": "candidates", "candidates": []}
+        elif len(candidates) == 1:
+            detail = get_http_client_detail(conn, candidates[0]["id"])
+            result = {"mode": "detail", "http_client": detail}
+        else:
+            result = {
+                "mode": "candidates",
+                "candidates": [
+                    {
+                        "id": c["id"],
+                        "service_id": c["service_id"],
+                        "base_uri": c["base_uri"],
+                    }
+                    for c in candidates
+                ],
+            }
+
+    if output_json:
+        print(json_mod.dumps(result, indent=2))
+    elif result["mode"] == "list":
+        print_http_clients_list(result["http_clients"])
+    elif result["mode"] == "candidates":
+        print_http_client_candidates(query or "", result["candidates"])
+    else:
+        print_http_client_detail(result["http_client"])
 
     conn.close()
 
