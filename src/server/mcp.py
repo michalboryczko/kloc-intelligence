@@ -628,6 +628,57 @@ class MCPServer:
             },
         ]
 
+    def handle_jsonrpc(self, request: dict) -> dict | None:
+        """Dispatch a single JSON-RPC 2.0 request.
+
+        Returns the response dict, or ``None`` for notifications (no id).
+        Used by both the stdio loop and the HTTP transport so tool handling
+        stays in one place.
+        """
+        req_id = request.get("id")
+        is_notification = "id" not in request
+        method = request.get("method", "")
+        params = request.get("params", {}) or {}
+
+        try:
+            if method == "initialize":
+                result: Any = {
+                    "protocolVersion": "2024-11-05",
+                    "capabilities": {"tools": {}},
+                    "serverInfo": {"name": "kloc-intelligence", "version": "0.1.0"},
+                }
+            elif method == "notifications/initialized":
+                return None
+            elif method == "tools/list":
+                result = {"tools": self.get_tools()}
+            elif method == "tools/call":
+                tool_name = params.get("name", "")
+                arguments = params.get("arguments", {})
+                tool_result = self.call_tool(tool_name, arguments)
+                result = {"content": [{"type": "text", "text": json.dumps(tool_result, indent=2)}]}
+            elif method == "ping":
+                result = {}
+            else:
+                if is_notification:
+                    return None
+                return {
+                    "jsonrpc": "2.0",
+                    "id": req_id,
+                    "error": {"code": -32601, "message": f"Method not found: {method}"},
+                }
+        except Exception as e:
+            if is_notification:
+                return None
+            return {
+                "jsonrpc": "2.0",
+                "id": req_id,
+                "error": {"code": -32000, "message": str(e)},
+            }
+
+        if is_notification:
+            return None
+        return {"jsonrpc": "2.0", "id": req_id, "result": result}
+
     def call_tool(self, name: str, arguments: dict) -> Any:
         """Call a tool by name."""
         handlers = {
@@ -1170,18 +1221,6 @@ def run_mcp_server(
     signal.signal(signal.SIGINT, shutdown)
     signal.signal(signal.SIGTERM, shutdown)
 
-    def send_response(
-        req_id: Any,
-        result: Any = None,
-        error: Any = None,
-    ):
-        response: dict = {"jsonrpc": "2.0", "id": req_id}
-        if error is not None:
-            response["error"] = {"code": -32000, "message": str(error)}
-        else:
-            response["result"] = result
-        print(json.dumps(response), flush=True)
-
     for line in sys.stdin:
         line = line.strip()
         if not line:
@@ -1190,50 +1229,16 @@ def run_mcp_server(
         try:
             request = json.loads(line)
         except json.JSONDecodeError as e:
-            send_response(None, error=f"Parse error: {e}")
+            err = {
+                "jsonrpc": "2.0",
+                "id": None,
+                "error": {"code": -32700, "message": f"Parse error: {e}"},
+            }
+            print(json.dumps(err), flush=True)
             continue
 
-        req_id = request.get("id")
-        method = request.get("method", "")
-        params = request.get("params", {})
-
-        try:
-            if method == "initialize":
-                send_response(
-                    req_id,
-                    {
-                        "protocolVersion": "2024-11-05",
-                        "capabilities": {"tools": {}},
-                        "serverInfo": {
-                            "name": "kloc-intelligence",
-                            "version": "0.1.0",
-                        },
-                    },
-                )
-            elif method == "notifications/initialized":
-                pass  # No response needed for notifications
-            elif method == "tools/list":
-                send_response(req_id, {"tools": server.get_tools()})
-            elif method == "tools/call":
-                tool_name = params.get("name", "")
-                arguments = params.get("arguments", {})
-                tool_result = server.call_tool(tool_name, arguments)
-                send_response(
-                    req_id,
-                    {
-                        "content": [
-                            {
-                                "type": "text",
-                                "text": json.dumps(tool_result, indent=2),
-                            }
-                        ],
-                    },
-                )
-            elif method == "ping":
-                send_response(req_id, {})
-            else:
-                send_response(req_id, error=f"Method not found: {method}")
-        except Exception as e:
-            send_response(req_id, error=str(e))
+        response = server.handle_jsonrpc(request)
+        if response is not None:
+            print(json.dumps(response), flush=True)
 
     server.close()

@@ -1273,10 +1273,39 @@ def mcp_server(
         None, "--config", help="Path to config JSON with project->database mapping"
     ),
 ):
-    """Start MCP server for AI agent integration."""
+    """Start MCP server (stdio transport) for AI agent integration."""
     from .server.mcp import run_mcp_server
 
     run_mcp_server(database=database, config_path=config)
+
+
+@app.command("mcp-server-http")
+def mcp_server_http(
+    database: str = typer.Option("neo4j", "--database", "-db", help="Neo4j database name"),
+    config: str = typer.Option(
+        None, "--config", help="Path to config JSON with project->database mapping"
+    ),
+    host: str = typer.Option(
+        "127.0.0.1", "--host", help="Bind address (default: localhost only)"
+    ),
+    port: int = typer.Option(8765, "--port", "-p", help="Bind port"),
+    path: str = typer.Option("/mcp", "--path", help="MCP endpoint path"),
+):
+    """Start MCP server (Streamable HTTP transport).
+
+    Exposes the same 22 tools as `mcp-server` but over HTTP. Single endpoint
+    that accepts JSON-RPC 2.0 POSTs. Defaults to localhost binding — pass
+    `--host 0.0.0.0` to expose on the LAN (do this only on trusted networks).
+    """
+    from .server.mcp_http import run_mcp_http_server
+
+    run_mcp_http_server(
+        database=database,
+        config_path=config,
+        host=host,
+        port=port,
+        path=path,
+    )
 
 
 if __name__ == "__main__":
