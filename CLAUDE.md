@@ -21,8 +21,8 @@ invocation), this one persists the graph and adds multi-hop Cypher, LLM
 explanations, and semantic search.
 
 This repo lives inside the monorepo at `/Users/michal/dev/ai/kloc/`. Sibling
-sub-repos: `kloc-cli`, `kloc-mapper`, `kloc-indexer-php`, `scip-php`,
-`kloc-symfony`, `kloc-reference-project-php`.
+sub-repos: `kloc-cli`, `kloc-mapper`, `kloc-indexer-php`, `kloc-symfony`,
+`kloc-reference-project-php`.
 
 ## Where things are
 
@@ -31,7 +31,8 @@ sub-repos: `kloc-cli`, `kloc-mapper`, `kloc-indexer-php`, `scip-php`,
 | --- | --- |
 | `src/cli.py` | Typer entry point. 24 commands (3 schema + 21 top-level, incl. `messages`/`events`/`http-clients`). Loads `.env` itself without overriding shell env. |
 | `src/config.py` | `Neo4jConfig.from_env()` — single source of truth for Neo4j env wiring. |
-| `src/server/mcp.py` | MCP JSON-RPC 2.0 stdio server with 22 tools (`kloc_resolve`, `kloc_context`, …, plus `kloc_messages`/`kloc_message`/`kloc_events`/`kloc_event`/`kloc_http_clients`/`kloc_http_client`). |
+| `src/server/mcp.py` | MCP JSON-RPC 2.0 server core + stdio transport. 22 tools (`kloc_resolve`, `kloc_context`, …, plus `kloc_messages`/`kloc_message`/`kloc_events`/`kloc_event`/`kloc_http_clients`/`kloc_http_client`). `MCPServer.handle_jsonrpc()` is the single dispatch entry point — both transports use it. |
+| `src/server/mcp_http.py` | Streamable HTTP transport (MCP 2025-03-26). Starlette + uvicorn, lazy-imported, gated by the `http` extra. POST `/mcp` accepts JSON-RPC single/batch and returns `application/json`; GET returns 405 (no server-initiated streams); DELETE returns 204 (stateless). `GET /health` for liveness. Default bind 127.0.0.1:8765 — only flip to 0.0.0.0 on trusted networks. |
 | `src/db/connection.py` | Thin `neo4j` driver wrapper (`Neo4jConnection`). |
 | `src/db/query_runner.py` | Cypher executor with logging. Thread-safe. |
 | `src/db/schema.py` | `NODE_KINDS` (13), `EDGE_TYPES` (13), `INDEXES` (16 incl. Message/Event/HttpClient), `CONSTRAINTS` (incl. `:Flow.flow_id`, `:Message.id`, `:Event.id`, `:HttpClient.id` uniqueness). Touch this when the schema actually changes. |
@@ -62,14 +63,14 @@ sub-repos: `kloc-cli`, `kloc-mapper`, `kloc-indexer-php`, `scip-php`,
 | `docs/specs/` | Feature specs and plans (e.g. `paraller-llm-api.md`, `paraller-llm-api-plan.md`, `kloc-intelligence/`). |
 | `docs/MIGRATION.md` | kloc-cli → kloc-intelligence migration guide. |
 | `bin/` | `setup.sh`, `import.sh`, `reset.sh`, `status.sh` — convenience wrappers. |
-| `docker/` | `Dockerfile`, embedded `docker-compose.yml`, `neo4j.conf`. Top-level `docker-compose.yml` is the canonical one. |
-| `docker-compose.yml` | Neo4j 5 community + Qdrant v1.12.1 with named volumes. |
+| `docker/` | `Dockerfile` (kloc-intelligence runtime image — installs `--extra http --extra ai`, default `CMD` is `mcp-server-http --host 0.0.0.0 --port 8765`), embedded `docker-compose.yml`, `neo4j.conf`. Top-level `docker-compose.yml` is the canonical one. |
+| `docker-compose.yml` | Neo4j 5 community + Qdrant v1.12.1 with named volumes, plus an opt-in `mcp-server` service (`profiles: ["mcp"]`) that runs the Streamable HTTP MCP daemon. Bring up DBs only with `docker compose up -d`; bring up the daemon too with `docker compose --profile mcp up -d`. |
 | `.github/workflows/ci.yml` | CI: lint + format + mypy + pytest. Neo4j and Qdrant come up as service containers. |
 
 ### Outside this repo
 | Path | What it is |
 | --- | --- |
-| `../docs/usage/kloc-intelligence/{cli,configuration,data-setup,mcp}.md` | User-facing guides — referenced from `README.md`. |
+| `../docs/v3/kloc-intelligence/` | **Canonical user-facing docs** (Diátaxis: tutorials / how-to-guides / reference / explanation / architecture / infrastructure). Start at `../docs/v3/kloc-intelligence/index.md`. The pre-v3 `../docs/usage/kloc-intelligence/` set is obsolete — don't link to it. |
 | `../artifacts/kloc-dev/context-final/sot.json` | App-only fixture (1154 nodes, 825 KB). Used by `loaded_database`. |
 | `../artifacts/kloc-dev/context-rust-internal/sot.json` | Vendor-inclusive fixture (128K nodes, 92.8 MB). Used by `loaded_database_with_vendor` and snapshot tests. |
 | `../tests/snapshot-2103260323.json` | Golden snapshot, lives in **monorepo parent** (separate git repo from this one). |
@@ -80,8 +81,9 @@ sub-repos: `kloc-cli`, `kloc-mapper`, `kloc-indexer-php`, `scip-php`,
 
 ```bash
 # from kloc-intelligence/
-uv sync --all-extras                 # full install (dev + ai)
+uv sync --all-extras                 # full install (dev + ai + http)
 docker compose up -d                 # Neo4j 5 + Qdrant
+docker compose --profile mcp up -d   # …plus MCP HTTP daemon on 127.0.0.1:8765
 
 # Lint / format / typecheck
 uv run ruff check src tests benchmarks

@@ -36,7 +36,7 @@ flow-level business summaries, semantic search) backed by Qdrant.
 - **Per-operation provider config** — point LLM and embeddings at any
   OpenAI-compatible endpoint independently (OpenRouter, Google Gemini,
   OpenAI, mixed).
-- **MCP server** — JSON-RPC 2.0 stdio protocol, 22 tools, multi-project
+- **MCP server** — JSON-RPC 2.0 over stdio **or** Streamable HTTP, 22 tools, multi-project
   support.
 - **Contract-compliant output** — JSON matches the kloc-contracts schemas
   used by every other tool in the pipeline.
@@ -66,14 +66,18 @@ uv run kloc-intelligence flows OrderController::create
 uv run kloc-intelligence search "create a new customer order"
 ```
 
-Detailed guides live under `docs/usage/kloc-intelligence/`:
+Full documentation lives at [`docs/v3/kloc-intelligence/`](../docs/v3/kloc-intelligence/index.md), organized via the [Diátaxis](https://diataxis.eu/) framework:
 
-- [configuration.md](../docs/usage/kloc-intelligence/configuration.md) —
-  install, env vars, provider recipes
-- [data-setup.md](../docs/usage/kloc-intelligence/data-setup.md) —
-  pipeline order (import → flows → enrich → enrich-flows)
-- [cli.md](../docs/usage/kloc-intelligence/cli.md) — every CLI command
-- [mcp.md](../docs/usage/kloc-intelligence/mcp.md) — MCP server + 22 tools
+| Section | When to use |
+| --- | --- |
+| [Tutorials](../docs/v3/kloc-intelligence/tutorials/) | First time here — [installation](../docs/v3/kloc-intelligence/tutorials/installation.md) and a guided [first queries](../docs/v3/kloc-intelligence/tutorials/first-queries.md) walk-through |
+| [How-To Guides](../docs/v3/kloc-intelligence/how-to-guides/) | Task recipes: [import + manage graph](../docs/v3/kloc-intelligence/how-to-guides/import-and-manage-graph.md), [analyze Symfony flows](../docs/v3/kloc-intelligence/how-to-guides/analyze-symfony-flows.md), [enrich with AI](../docs/v3/kloc-intelligence/how-to-guides/enrich-with-ai.md), [wire the MCP server](../docs/v3/kloc-intelligence/how-to-guides/mcp-server-setup.md), [Cypher queries](../docs/v3/kloc-intelligence/how-to-guides/direct-cypher-queries.md), [switch embedding providers](../docs/v3/kloc-intelligence/how-to-guides/switch-embedding-providers.md) |
+| [Reference](../docs/v3/kloc-intelligence/reference/) | Exhaustive specs: [CLI](../docs/v3/kloc-intelligence/reference/cli-reference.md), [MCP server + tools](../docs/v3/kloc-intelligence/reference/mcp-server-reference.md), [graph schema](../docs/v3/kloc-intelligence/reference/graph-schema.md), [env vars](../docs/v3/kloc-intelligence/reference/environment-variables.md) |
+| [Explanation](../docs/v3/kloc-intelligence/explanation/) | Concepts: [what it does](../docs/v3/kloc-intelligence/explanation/what-it-does.md), [how processes work](../docs/v3/kloc-intelligence/explanation/how-processes-work.md), [architecture decisions](../docs/v3/kloc-intelligence/explanation/architecture-decisions.md) |
+| [Architecture](../docs/v3/kloc-intelligence/architecture/) | Diagrams: [system](../docs/v3/kloc-intelligence/architecture/system-architecture.md), [flow graph v3](../docs/v3/kloc-intelligence/architecture/flow-graph-design.md), [AI pipeline](../docs/v3/kloc-intelligence/architecture/ai-pipeline-architecture.md) |
+| [Infrastructure](../docs/v3/kloc-intelligence/infrastructure/) | Ops: [Docker](../docs/v3/kloc-intelligence/infrastructure/docker-deployment.md), [performance + scaling](../docs/v3/kloc-intelligence/infrastructure/performance-scaling.md), [troubleshooting](../docs/v3/kloc-intelligence/infrastructure/troubleshooting.md) |
+
+Migration note: until very recently these guides lived at `docs/usage/kloc-intelligence/`. The old paths are obsolete — use the v3 set above.
 
 ## Commands at a glance
 
@@ -85,7 +89,7 @@ Detailed guides live under `docs/usage/kloc-intelligence/`:
 | Symfony entities | `messages` · `events` · `http-clients` |
 | Source | `source` · `chunks` |
 | AI | `enrich` · `enrich-status` · `enrich-flows` · `explain` · `search` |
-| Server | `mcp-server` |
+| Server | `mcp-server` (stdio) · `mcp-server-http` (Streamable HTTP) |
 
 All commands accept `--json` for machine-readable output. AI commands accept
 `--debug` to log LLM prompts and embedding bodies.
@@ -128,8 +132,9 @@ KLOC_PROJECT_NAME=default
 Native Google Gemini works out of the box via the OpenAI-compatible endpoint
 (`https://generativelanguage.googleapis.com/v1beta/openai/`); a compat shim in
 `src/ai/_haystack_compat.py` handles Gemini's missing `usage` field. See
-[configuration.md](../docs/usage/kloc-intelligence/configuration.md) for
-provider recipes.
+[switch-embedding-providers.md](../docs/v3/kloc-intelligence/how-to-guides/switch-embedding-providers.md)
+and [environment-variables.md](../docs/v3/kloc-intelligence/reference/environment-variables.md)
+for full provider recipes.
 
 ## Architecture
 
@@ -138,7 +143,8 @@ src/
 ├── cli.py              # Typer entry point — every CLI command
 ├── config.py           # Neo4jConfig from env
 ├── server/
-│   └── mcp.py          # MCP server (JSON-RPC 2.0 over stdio), 22 tools
+│   ├── mcp.py          # MCP server core + stdio transport (JSON-RPC 2.0), 22 tools
+│   └── mcp_http.py     # Streamable HTTP transport (Starlette + uvicorn, `http` extra)
 ├── db/
 │   ├── connection.py   # Neo4j driver wrapper
 │   ├── query_runner.py # Cypher executor with logging
@@ -265,6 +271,10 @@ uv run --extra ai pytest tests/test_flow_enricher.py -v
 
 ## MCP server
 
+Two transports — same 22 tools, same `MCPServer` dispatch core.
+
+### stdio (default, for editor MCP clients)
+
 ```bash
 uv run kloc-intelligence mcp-server                                  # default db
 uv run kloc-intelligence mcp-server --database my_app_db             # named db
@@ -288,9 +298,74 @@ Wire into Claude Code's `~/.claude.json` (or any MCP-aware client):
 }
 ```
 
-The 22 tools then become callable as
-`mcp__kloc-intelligence__kloc_context`, etc. See
-[mcp.md](../docs/usage/kloc-intelligence/mcp.md) for the full catalog.
+### Streamable HTTP (for remote clients, web UIs, n8n, agents-as-a-service)
+
+Requires the `http` extra:
+
+```bash
+uv sync --extra http
+uv run kloc-intelligence mcp-server-http              # 127.0.0.1:8765/mcp
+uv run kloc-intelligence mcp-server-http --port 9000
+uv run kloc-intelligence mcp-server-http --host 0.0.0.0 --port 8765  # LAN — trusted networks only
+```
+
+Single endpoint at `POST /mcp` accepts JSON-RPC 2.0 (single or batch) and
+returns `application/json`. `GET /mcp` returns 405 (no server-initiated
+streams); `DELETE /mcp` returns 204 (no server-side sessions). `GET /health`
+returns a small JSON status object. Default bind is **localhost only** — set
+`--host 0.0.0.0` deliberately, and only on networks where you control access.
+
+Wire into clients that speak Streamable HTTP:
+
+```json
+{
+  "mcpServers": {
+    "kloc-intelligence": {
+      "url": "http://localhost:8765/mcp"
+    }
+  }
+}
+```
+
+Quick smoke test from the shell:
+
+```bash
+curl -sS -X POST http://localhost:8765/mcp \
+  -H 'content-type: application/json' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | jq '.result.tools | length'
+# => 22
+```
+
+#### Run it under Docker Compose
+
+The top-level `docker-compose.yml` ships an opt-in `mcp-server` service that
+bundles the HTTP daemon next to Neo4j and Qdrant. It's gated by the `mcp`
+profile so the default `docker compose up -d` still brings only the DBs:
+
+```bash
+docker compose --profile mcp up -d --build
+
+# Liveness
+curl -s http://localhost:8765/health
+# {"status":"ok","transport":"streamable-http"}
+
+# tools/list
+curl -sS -X POST http://localhost:8765/mcp \
+  -H 'content-type: application/json' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | jq '.result.tools | length'
+```
+
+The container picks `bolt://neo4j:7687` and `http://qdrant:6333` automatically.
+LLM / embedding keys are passed through from your shell or `.env`
+(`LLM_API_KEY`, `EMBEDDING_API_KEY`, etc.). The host port is bound to
+`127.0.0.1:8765` by default — flip the mapping only behind a reverse proxy
+or on a trusted private network. Override the host port via
+`MCP_HTTP_PORT=9000 docker compose --profile mcp up -d`.
+
+The 22 tools become callable as `mcp__kloc-intelligence__kloc_context`,
+etc. See [reference/mcp-server-reference.md](../docs/v3/kloc-intelligence/reference/mcp-server-reference.md)
+for the full tool catalog and [how-to-guides/mcp-server-setup.md](../docs/v3/kloc-intelligence/how-to-guides/mcp-server-setup.md)
+for end-to-end wire-up.
 
 ## Performance
 
