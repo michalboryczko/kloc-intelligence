@@ -1,6 +1,7 @@
 """Batch enrichment orchestrator for generating explanations and embeddings."""
 
 import logging
+import os
 import threading
 import time
 from collections.abc import Callable
@@ -18,6 +19,23 @@ from .source_reader import SourceReader
 logger = logging.getLogger(__name__)
 
 ENRICHABLE_KINDS = ["Class", "Method"]
+
+EXCLUDE_NAMESPACES_ENV_VAR = "KLOC_ENRICH_EXCLUDE_NAMESPACES"
+
+
+def load_exclude_namespaces() -> tuple[str, ...]:
+    """Load the enrichment-exclusion FQN-prefix list from the environment.
+
+    Comma-separated FQN prefixes; whitespace around entries is stripped. Empty
+    or unset means no exclusion (current behavior preserved). A node is
+    excluded from enrichment when its ``fqn`` starts with any of the prefixes.
+
+    Example: ``KLOC_ENRICH_EXCLUDE_NAMESPACES=Symfony\\,Doctrine\\,Twig\\``
+    """
+    raw = os.environ.get(EXCLUDE_NAMESPACES_ENV_VAR, "").strip()
+    if not raw:
+        return ()
+    return tuple(p.strip() for p in raw.split(",") if p.strip())
 
 
 @dataclass
@@ -46,9 +64,20 @@ class Enricher:
     Classes get context from parent classes/interfaces and first-level usages.
     """
 
-    def __init__(self, runner: QueryRunner, config: AIConfig):
+    def __init__(
+        self,
+        runner: QueryRunner,
+        config: AIConfig,
+        exclude_namespaces: tuple[str, ...] | None = None,
+    ):
         self._runner = runner
         self._config = config
+        # Deny-list of FQN prefixes whose nodes get skipped during batch
+        # enrichment. ``None`` falls back to the env var; pass an explicit
+        # tuple (possibly empty) to override at the call site.
+        self._exclude_namespaces: tuple[str, ...] = (
+            exclude_namespaces if exclude_namespaces is not None else load_exclude_namespaces()
+        )
         self._reader = SourceReader(config.project_root)
         self._chunker = CodeChunker(max_tokens=config.max_tokens_per_chunk)
         # Test seam: tests may assign a MagicMock to any of these to override
@@ -190,17 +219,28 @@ class Enricher:
         return self._enrich_single(node, force)
 
     def get_status(self) -> dict:
-        """Get enrichment status: total, enriched, pending counts per kind."""
-        records = self._runner.execute(
-            """
+        """Get enrichment status: total, enriched, pending counts per kind.
+
+        Counts reflect the *enrichable* population — nodes filtered out by
+        ``self._exclude_namespaces`` are excluded from both ``total`` and
+        ``enriched`` so the percentage matches what ``enrich`` will actually
+        process.
+        """
+        where = ["n.kind IN $kinds", "n.file IS NOT NULL"]
+        if self._exclude_namespaces:
+            where.append("NOT ANY(prefix IN $excluded WHERE n.fqn STARTS WITH prefix)")
+        query = f"""
             MATCH (n:Node)
-            WHERE n.kind IN $kinds AND n.file IS NOT NULL
+            WHERE {" AND ".join(where)}
             RETURN n.kind AS kind,
                    count(n) AS total,
                    count(n.explanation) AS enriched
             ORDER BY n.kind
-            """,
+        """
+        records = self._runner.execute(
+            query,
             kinds=ENRICHABLE_KINDS,
+            excluded=list(self._exclude_namespaces),
         )
         stats = {}
         total_all = 0
@@ -415,20 +455,27 @@ class Enricher:
     # ── Helpers ──────────────────────────────────────────────────
 
     def _get_enrichable_nodes(self, kinds: list[str], force: bool) -> list[NodeData]:
-        """Query Neo4j for nodes that need enrichment."""
-        if force:
-            query = """
-                MATCH (n:Node)
-                WHERE n.kind IN $kinds AND n.file IS NOT NULL
-                RETURN n ORDER BY n.kind, n.fqn
-            """
-        else:
-            query = """
-                MATCH (n:Node)
-                WHERE n.kind IN $kinds AND n.file IS NOT NULL AND n.explanation IS NULL
-                RETURN n ORDER BY n.kind, n.fqn
-            """
-        records = self._runner.execute(query, kinds=kinds)
+        """Query Neo4j for nodes that need enrichment.
+
+        Honors ``self._exclude_namespaces``: any node whose ``fqn`` starts with
+        one of those prefixes is filtered out at the Cypher level so the LLM
+        and embedding pipelines never see it.
+        """
+        where = ["n.kind IN $kinds", "n.file IS NOT NULL"]
+        if not force:
+            where.append("n.explanation IS NULL")
+        if self._exclude_namespaces:
+            where.append("NOT ANY(prefix IN $excluded WHERE n.fqn STARTS WITH prefix)")
+        query = f"""
+            MATCH (n:Node)
+            WHERE {" AND ".join(where)}
+            RETURN n ORDER BY n.kind, n.fqn
+        """
+        records = self._runner.execute(
+            query,
+            kinds=kinds,
+            excluded=list(self._exclude_namespaces),
+        )
         return records_to_nodes(records)
 
     def _has_explanation(self, node_id: str) -> bool:

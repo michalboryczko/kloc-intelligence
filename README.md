@@ -127,6 +127,14 @@ KLOC_PROJECT_NAME=default
 # Comma-separated FQN prefixes; default `App\`. Messages / events / http_clients
 # are universal — this filter applies to :Flow entries only.
 # KLOC_FLOW_NAMESPACES=App\,Domain\Orders\,Acme\
+
+# Enrichment namespace deny-list (used by `enrich` / `enrich-status`)
+# Comma-separated FQN prefixes to SKIP. Nodes are still imported into Neo4j
+# but no LLM explanation is generated and nothing is embedded into Qdrant —
+# so excluded nodes also never surface in `kloc search`. Default empty.
+# Use this when sot.json includes vendor (Symfony\, Doctrine\, …) but you
+# only want to pay LLM tokens on your own application code.
+# KLOC_ENRICH_EXCLUDE_NAMESPACES=Symfony\,Doctrine\,Twig\,Psr\,Monolog\
 ```
 
 Native Google Gemini works out of the box via the OpenAI-compatible endpoint

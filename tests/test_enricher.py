@@ -559,3 +559,132 @@ class TestEmptyEdgeCase:
         assert cb_calls == 1
         # No items → no executor constructed
         assert pool_cls.called is False
+
+
+# ── Exclusion-namespace filter (deny-list) ─────────────────────────────
+
+
+class TestExcludeNamespacesEnvLoader:
+    def test_unset_env_returns_empty_tuple(self, monkeypatch):
+        from src.ai.enricher import load_exclude_namespaces
+
+        monkeypatch.delenv("KLOC_ENRICH_EXCLUDE_NAMESPACES", raising=False)
+        assert load_exclude_namespaces() == ()
+
+    def test_empty_env_returns_empty_tuple(self, monkeypatch):
+        from src.ai.enricher import load_exclude_namespaces
+
+        monkeypatch.setenv("KLOC_ENRICH_EXCLUDE_NAMESPACES", "")
+        assert load_exclude_namespaces() == ()
+
+    def test_whitespace_only_env_returns_empty_tuple(self, monkeypatch):
+        from src.ai.enricher import load_exclude_namespaces
+
+        monkeypatch.setenv("KLOC_ENRICH_EXCLUDE_NAMESPACES", "   ,  , ")
+        assert load_exclude_namespaces() == ()
+
+    def test_comma_separated_with_whitespace(self, monkeypatch):
+        from src.ai.enricher import load_exclude_namespaces
+
+        monkeypatch.setenv(
+            "KLOC_ENRICH_EXCLUDE_NAMESPACES",
+            "  Symfony\\ , Doctrine\\,Twig\\  ",
+        )
+        assert load_exclude_namespaces() == ("Symfony\\", "Doctrine\\", "Twig\\")
+
+
+class TestExcludeNamespacesCypher:
+    """Verify the Cypher emitted by selection paths binds the filter correctly.
+
+    Run against a stubbed `QueryRunner` so we capture the rendered query and
+    the bound params without needing Neo4j. Production behavior — STARTS WITH
+    against `n.fqn` — is covered by the Cypher engine itself.
+    """
+
+    def _make_enricher(self, runner: MagicMock, exclude: tuple[str, ...] | None):
+        return Enricher(runner, _make_config(), exclude_namespaces=exclude)
+
+    def test_no_exclusion_omits_excluded_clause(self):
+        runner = MagicMock()
+        runner.execute.return_value = []
+        enricher = self._make_enricher(runner, exclude=())
+
+        enricher._get_enrichable_nodes(["Class", "Method"], force=False)
+
+        call = runner.execute.call_args
+        query, kwargs = call.args[0], call.kwargs
+        # Excluded list still bound (harmless), but the WHERE clause omits the prefix check
+        assert "STARTS WITH prefix" not in query
+        assert kwargs["kinds"] == ["Class", "Method"]
+        assert kwargs["excluded"] == []
+
+    def test_exclusion_adds_clause_and_binds_prefixes(self):
+        runner = MagicMock()
+        runner.execute.return_value = []
+        enricher = self._make_enricher(runner, exclude=("Symfony\\", "Doctrine\\"))
+
+        enricher._get_enrichable_nodes(["Class", "Method"], force=False)
+
+        call = runner.execute.call_args
+        query, kwargs = call.args[0], call.kwargs
+        assert "NOT ANY(prefix IN $excluded WHERE n.fqn STARTS WITH prefix)" in query
+        assert kwargs["excluded"] == ["Symfony\\", "Doctrine\\"]
+
+    def test_force_keeps_already_enriched_but_still_filters(self):
+        runner = MagicMock()
+        runner.execute.return_value = []
+        enricher = self._make_enricher(runner, exclude=("Symfony\\",))
+
+        enricher._get_enrichable_nodes(["Class", "Method"], force=True)
+
+        query = runner.execute.call_args.args[0]
+        assert "n.explanation IS NULL" not in query
+        assert "STARTS WITH prefix" in query
+
+    def test_get_status_applies_same_filter(self):
+        runner = MagicMock()
+        runner.execute.return_value = []
+        enricher = self._make_enricher(runner, exclude=("Symfony\\", "Doctrine\\"))
+
+        enricher.get_status()
+
+        call = runner.execute.call_args
+        query, kwargs = call.args[0], call.kwargs
+        assert "NOT ANY(prefix IN $excluded WHERE n.fqn STARTS WITH prefix)" in query
+        assert kwargs["excluded"] == ["Symfony\\", "Doctrine\\"]
+
+    def test_constructor_explicit_arg_wins_over_env(self, monkeypatch):
+        """Explicit ``exclude_namespaces=()`` should disable an env-configured list."""
+        monkeypatch.setenv("KLOC_ENRICH_EXCLUDE_NAMESPACES", "Symfony\\")
+        runner = MagicMock()
+        enricher = self._make_enricher(runner, exclude=())
+
+        assert enricher._exclude_namespaces == ()
+
+    def test_constructor_none_reads_env(self, monkeypatch):
+        monkeypatch.setenv("KLOC_ENRICH_EXCLUDE_NAMESPACES", "Symfony\\,Doctrine\\")
+        runner = MagicMock()
+        enricher = Enricher(runner, _make_config())  # exclude_namespaces defaults to None
+
+        assert enricher._exclude_namespaces == ("Symfony\\", "Doctrine\\")
+
+
+class TestParseExcludeNamespacesCli:
+    """Three-state contract: None (use env), "" (override env to empty), value."""
+
+    def test_none_input_returns_none(self):
+        from src.cli import _parse_exclude_namespaces
+
+        # CLI flag not passed → Enricher should fall back to env
+        assert _parse_exclude_namespaces(None) is None
+
+    def test_empty_string_returns_empty_tuple(self):
+        from src.cli import _parse_exclude_namespaces
+
+        # `--exclude-namespaces ""` is the explicit "disable env-configured list" path
+        assert _parse_exclude_namespaces("") == ()
+
+    def test_value_is_split_and_stripped(self):
+        from src.cli import _parse_exclude_namespaces
+
+        assert _parse_exclude_namespaces(" Symfony\\ , Doctrine\\ ") == ("Symfony\\", "Doctrine\\")

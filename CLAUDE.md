@@ -186,6 +186,15 @@ labels for kind-scoped ones (faster, hits the kind-specific index).
   (comma-separated FQN-prefix allow-list, default `App\`). Loaded by
   `flow_importer.load_flow_namespaces()`; consumed by `parse_v3`. Applies
   to :Flow entries only — messages / events / http_clients are universal.
+- Class/Method enrichment filtering is env-driven: `KLOC_ENRICH_EXCLUDE_NAMESPACES`
+  (comma-separated FQN-prefix **deny-list**, default empty). Loaded by
+  `enricher.load_exclude_namespaces()`; consumed by the SELECT in
+  `_get_enrichable_nodes` and `get_status` so totals match what will run.
+  Nodes are still imported — they're just skipped at the LLM + embedding
+  stage, which also keeps them out of `kloc search` results. CLI override:
+  `--exclude-namespaces "Symfony\,Doctrine\"` on `enrich` / `enrich-status`
+  (pass `""` to disable an env-configured list). Single-node `enrich_node()`
+  bypasses the filter — explicit user intent wins.
 - Gemini embedding dimension is 3072, OpenRouter qwen3-embedding-8b is
   4096. Switching providers means dropping the Qdrant collections
   (different dimensions can't coexist in one collection).

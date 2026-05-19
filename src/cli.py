@@ -415,6 +415,18 @@ def _require_ai_deps():
         raise typer.Exit(1) from exc
 
 
+def _parse_exclude_namespaces(value: str | None) -> tuple[str, ...] | None:
+    """Translate the ``--exclude-namespaces`` CLI input into an Enricher arg.
+
+    ``None`` means the flag wasn't passed → let the Enricher consult the env.
+    An empty string means the user wants to override an env-configured list
+    with "no exclusion" — return an empty tuple. Otherwise split on commas.
+    """
+    if value is None:
+        return None
+    return tuple(p.strip() for p in value.split(",") if p.strip())
+
+
 def _setup_logging(debug: bool):
     """Configure logging for AI commands."""
     import logging
@@ -599,6 +611,15 @@ def enrich(
     kinds: str = typer.Option("Class,Method", "--kinds", "-k", help="Node kinds to enrich"),
     force: bool = typer.Option(False, "--force", "-f", help="Re-enrich already processed nodes"),
     batch_size: int = typer.Option(10, "--batch-size", "-b", help="Nodes per batch"),
+    exclude_namespaces: str = typer.Option(
+        None,
+        "--exclude-namespaces",
+        help=(
+            "Comma-separated FQN prefixes to skip during enrichment "
+            "(e.g. 'Symfony\\,Doctrine\\'). Overrides KLOC_ENRICH_EXCLUDE_NAMESPACES. "
+            "Pass an empty string to disable an env-configured exclusion list."
+        ),
+    ),
     debug: bool = typer.Option(False, "--debug", help="Enable debug logging"),
 ):
     """Batch generate explanations and embeddings for all class/method nodes."""
@@ -625,7 +646,11 @@ def enrich(
 
     conn = Neo4jConnection(neo4j_config)
     runner = QueryRunner(conn)
-    enricher = Enricher(runner, ai_config)
+    enricher = Enricher(
+        runner,
+        ai_config,
+        exclude_namespaces=_parse_exclude_namespaces(exclude_namespaces),
+    )
 
     kind_list = [k.strip() for k in kinds.split(",")]
 
@@ -732,6 +757,14 @@ def enrich_flows(
 @app.command("enrich-status")
 def enrich_status(
     output_json: bool = typer.Option(False, "--json", "-j", help="Output as JSON"),
+    exclude_namespaces: str = typer.Option(
+        None,
+        "--exclude-namespaces",
+        help=(
+            "Comma-separated FQN prefixes to skip in the totals (matches what "
+            "`enrich` will process). Overrides KLOC_ENRICH_EXCLUDE_NAMESPACES."
+        ),
+    ),
 ):
     """Show progress of enrichment (how many nodes enriched vs total)."""
     import json as json_mod
@@ -749,7 +782,11 @@ def enrich_status(
     from .ai.config import AIConfig
 
     ai_config = AIConfig()
-    enricher = Enricher(runner, ai_config)
+    enricher = Enricher(
+        runner,
+        ai_config,
+        exclude_namespaces=_parse_exclude_namespaces(exclude_namespaces),
+    )
     status = enricher.get_status()
 
     if output_json:
@@ -1285,9 +1322,7 @@ def mcp_server_http(
     config: str = typer.Option(
         None, "--config", help="Path to config JSON with project->database mapping"
     ),
-    host: str = typer.Option(
-        "127.0.0.1", "--host", help="Bind address (default: localhost only)"
-    ),
+    host: str = typer.Option("127.0.0.1", "--host", help="Bind address (default: localhost only)"),
     port: int = typer.Option(8765, "--port", "-p", help="Bind port"),
     path: str = typer.Option("/mcp", "--path", help="MCP endpoint path"),
 ):
