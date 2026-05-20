@@ -418,11 +418,9 @@ class TestOutputModelConversion:
         assert "property" in ub
         assert "property_name" not in ub
 
-    def test_empty_output_validates_against_schema(self):
+    def test_empty_output_validates_against_schema(self, schema):
         """Empty context output should validate against schema."""
         target = _make_node()
         result = ContextResult(target=target, max_depth=1)
         d = ContextOutput.from_result(result).to_dict()
-        with open(SCHEMA_PATH) as f:
-            schema = json.load(f)
         jsonschema.validate(instance=d, schema=schema)

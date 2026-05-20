@@ -1346,7 +1346,9 @@ def build_class_used_by(
 
                 method_children.append(child_entry)
 
-            method_children.sort(key=lambda e: (e.file or "", e.line if e.line is not None else 0, e.fqn or ""))
+            method_children.sort(
+                key=lambda e: (e.file or "", e.line if e.line is not None else 0, e.fqn or "")
+            )
             entry.children = method_children
 
     # ------------------------------------------------------------------

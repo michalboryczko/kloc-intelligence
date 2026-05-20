@@ -510,9 +510,15 @@ def build_interface_used_by(
     # ------------------------------------------------------------------
     # Sort within each bucket by (file, line) for stable ordering
     # ------------------------------------------------------------------
-    implements_entries.sort(key=lambda e: (e.file or "", e.line if e.line is not None else 0, e.fqn or ""))
-    extends_entries.sort(key=lambda e: (e.file or "", e.line if e.line is not None else 0, e.fqn or ""))
-    property_type_entries.sort(key=lambda e: (e.file or "", e.line if e.line is not None else 0, e.fqn or ""))
+    implements_entries.sort(
+        key=lambda e: (e.file or "", e.line if e.line is not None else 0, e.fqn or "")
+    )
+    extends_entries.sort(
+        key=lambda e: (e.file or "", e.line if e.line is not None else 0, e.fqn or "")
+    )
+    property_type_entries.sort(
+        key=lambda e: (e.file or "", e.line if e.line is not None else 0, e.fqn or "")
+    )
 
     # ------------------------------------------------------------------
     # 9. Combine in priority order: implements, extends, property_type
