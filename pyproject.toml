@@ -10,18 +10,14 @@ dependencies = [
     "rich>=13.0",
     "msgspec>=0.18.0",
     "pyyaml>=6.0",
-]
-
-[project.optional-dependencies]
-ai = [
+    "starlette>=0.37",
+    "uvicorn[standard]>=0.30",
     "haystack-ai>=2.6.0",
     "qdrant-haystack>=5.0.0",
     "qdrant-client>=1.12.0",
 ]
-http = [
-    "starlette>=0.37",
-    "uvicorn[standard]>=0.30",
-]
+
+[project.optional-dependencies]
 dev = [
     "pytest>=7.0",
     "pytest-asyncio>=0.21",
@@ -30,7 +26,6 @@ dev = [
     "mypy>=1.10",
     "jsonschema>=4.26.0",
     "httpx>=0.27",
-    "starlette>=0.37",
 ]
 
 [project.scripts]

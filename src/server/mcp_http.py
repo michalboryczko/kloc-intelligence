@@ -25,12 +25,7 @@ from .mcp import MCPServer
 
 
 def create_app(server: MCPServer, path: str = "/mcp") -> Any:
-    """Build a Starlette ASGI app that wraps the given MCPServer.
-
-    Imports starlette lazily so importing this module without the ``http``
-    extra installed still works (the CLI will surface the ImportError when
-    the user actually starts the server).
-    """
+    """Build a Starlette ASGI app that wraps the given MCPServer."""
     from starlette.applications import Starlette
     from starlette.requests import Request
     from starlette.responses import JSONResponse, Response
@@ -123,12 +118,7 @@ def run_mcp_http_server(
         port: Bind port.
         path: HTTP path the MCP endpoint is mounted at.
     """
-    try:
-        import uvicorn
-    except ImportError as e:
-        raise ImportError(
-            "HTTP transport requires the 'http' extra. Install with: uv sync --extra http"
-        ) from e
+    import uvicorn
 
     server = MCPServer(database=database, config_path=config_path)
     app = create_app(server, path=path)

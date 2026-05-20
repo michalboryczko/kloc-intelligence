@@ -30,8 +30,8 @@ jobs:
       - name: Set up Python
         run: uv python install ${{ env.PYTHON_VERSION }}
 
-      - name: Install dev + ai dependencies
-        run: uv sync --extra dev --extra ai
+      - name: Install dev dependencies
+        run: uv sync --extra dev
 
       - name: Ruff lint
         run: uv run ruff check src tests benchmarks
@@ -120,8 +120,8 @@ jobs:
       - name: Set up Python
         run: uv python install ${{ env.PYTHON_VERSION }}
 
-      - name: Install dev + ai dependencies
-        run: uv sync --extra dev --extra ai
+      - name: Install dev dependencies
+        run: uv sync --extra dev
 
       - name: Run pytest
         # test_flow_enricher.py needs a real PHP project + Haystack pipeline;

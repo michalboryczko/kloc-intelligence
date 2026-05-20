@@ -237,7 +237,7 @@ top hits.
 ## Development
 
 ```bash
-uv sync --extra dev --extra ai
+uv sync --extra dev    # core deps are always installed; --extra dev adds tooling
 
 # Lint + format check
 uv run ruff check src tests benchmarks
@@ -246,7 +246,7 @@ uv run ruff format --check src tests benchmarks
 # Static analysis
 uv run mypy src
 
-# Tests (unit + Neo4j integration; snapshots + Haystack tests skipped without fixtures)
+# Tests (unit + Neo4j integration; snapshots + flow-enricher tests need fixtures)
 uv run pytest -q --deselect tests/test_snapshot.py --deselect tests/test_flow_enricher.py
 
 # Apply formatter in-place
@@ -268,13 +268,13 @@ CI because the parent repo's `artifacts/` directory isn't checked in.
 uv run pytest tests/test_snapshot.py -v
 ```
 
-### Haystack-dependent tests
+### Flow-enricher tests
 
-`tests/test_flow_enricher.py` requires `--extra ai` and is skipped in CI by
-default because Haystack pipelines are expensive to import. Run locally:
+`tests/test_flow_enricher.py` is skipped in CI by default because the Haystack
+pipelines it imports are expensive to load. Run locally:
 
 ```bash
-uv run --extra ai pytest tests/test_flow_enricher.py -v
+uv run pytest tests/test_flow_enricher.py -v
 ```
 
 ## MCP server
@@ -308,10 +308,7 @@ Wire into Claude Code's `~/.claude.json` (or any MCP-aware client):
 
 ### Streamable HTTP (for remote clients, web UIs, n8n, agents-as-a-service)
 
-Requires the `http` extra:
-
 ```bash
-uv sync --extra http
 uv run kloc-intelligence mcp-server-http              # 127.0.0.1:8765/mcp
 uv run kloc-intelligence mcp-server-http --port 9000
 uv run kloc-intelligence mcp-server-http --host 0.0.0.0 --port 8765  # LAN — trusted networks only

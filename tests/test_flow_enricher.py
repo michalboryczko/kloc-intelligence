@@ -10,8 +10,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-haystack = pytest.importorskip("haystack", reason="ai extras not installed")
-
 from src.ai import pipelines as _pipelines
 from src.ai.config import AIConfig, EmbeddingProviderConfig, LLMProviderConfig
 from src.ai.flow_enricher import (

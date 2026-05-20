@@ -404,17 +404,6 @@ def overrides(
     conn.close()
 
 
-def _require_ai_deps():
-    """Check that AI optional dependencies are installed."""
-    try:
-        import haystack  # noqa: F401
-        import qdrant_client  # noqa: F401
-    except ImportError as exc:
-        console.print("[red]AI features require additional dependencies.[/red]")
-        console.print("Install with: uv sync --extra ai")
-        raise typer.Exit(1) from exc
-
-
 def _parse_exclude_namespaces(value: str | None) -> tuple[str, ...] | None:
     """Translate the ``--exclude-namespaces`` CLI input into an Enricher arg.
 
@@ -459,7 +448,6 @@ def explain(
     """Show or generate human-language explanation for a class/method."""
     import json as json_mod
 
-    _require_ai_deps()
     _setup_logging(debug)
     from .ai.config import AIConfig
     from .ai.enricher import Enricher
@@ -555,7 +543,6 @@ def search(
     """Semantic search across code, explanations, and flow summaries."""
     import json as json_mod
 
-    _require_ai_deps()
     from .ai.config import AIConfig
     from .ai.pipelines import build_search_pipeline, run_search, search_all_collections
 
@@ -625,7 +612,6 @@ def enrich(
     """Batch generate explanations and embeddings for all class/method nodes."""
     from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn
 
-    _require_ai_deps()
     _setup_logging(debug)
     from .ai.config import AIConfig
     from .ai.enricher import Enricher
@@ -701,7 +687,6 @@ def enrich_flows(
     """
     from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn
 
-    _require_ai_deps()
     _setup_logging(debug)
     from .ai.config import AIConfig
     from .ai.flow_enricher import FlowEnricher

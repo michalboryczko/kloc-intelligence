@@ -21,9 +21,6 @@ on the enricher; the per-thread pipeline builder is never reached.
 import threading
 from unittest.mock import MagicMock, patch
 
-import pytest
-
-haystack = pytest.importorskip("haystack", reason="ai extras not installed")
 from src.ai.config import AIConfig, EmbeddingProviderConfig, LLMProviderConfig
 from src.ai.enricher import Enricher, EnrichmentProgress
 from src.models.node import NodeData

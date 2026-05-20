@@ -8,10 +8,9 @@ WORKDIR /app
 # Copy dependency files first for better layer caching
 COPY pyproject.toml uv.lock README.md ./
 
-# Install dependencies (without dev) — include http (Starlette + uvicorn)
-# and ai (Haystack + Qdrant) so both the MCP HTTP daemon and the kloc_search
-# tool work out of the box.
-RUN uv sync --frozen --no-dev --extra http --extra ai
+# Install runtime deps. Everything the MCP HTTP daemon and the kloc_search /
+# enrich tools need lives in core dependencies — no extras required.
+RUN uv sync --frozen --no-dev
 
 # Copy source code
 COPY src/ src/

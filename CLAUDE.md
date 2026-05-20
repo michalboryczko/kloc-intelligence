@@ -58,12 +58,12 @@ sub-repos: `kloc-cli`, `kloc-mapper`, `kloc-indexer-php`, `kloc-symfony`,
 | --- | --- |
 | `tests/conftest.py` | `loaded_database` fixture (App-only) and `loaded_database_with_vendor` fixture (vendor-inclusive) with path-aware caching. Both `pytest.skip` when fixtures aren't present. |
 | `tests/test_snapshot.py` | Loads vendor-inclusive dataset, compares orchestration output against monorepo golden at `../tests/snapshot-2103260323.json`. **Skipped in CI.** |
-| `tests/test_flow_enricher.py` | Needs `--extra ai`. Skipped in CI by default. |
+| `tests/test_flow_enricher.py` | Loads heavy Haystack pipelines. Skipped in CI by default. |
 | `tests/snapshots/` | Inline snapshot fixtures for non-test_snapshot tests. |
 | `docs/specs/` | Feature specs and plans (e.g. `paraller-llm-api.md`, `paraller-llm-api-plan.md`, `kloc-intelligence/`). |
 | `docs/MIGRATION.md` | kloc-cli → kloc-intelligence migration guide. |
 | `bin/` | `setup.sh`, `import.sh`, `reset.sh`, `status.sh` — convenience wrappers. |
-| `docker/` | `Dockerfile` (kloc-intelligence runtime image — installs `--extra http --extra ai`, default `CMD` is `mcp-server-http --host 0.0.0.0 --port 8765`), embedded `docker-compose.yml`, `neo4j.conf`. Top-level `docker-compose.yml` is the canonical one. |
+| `docker/` | `Dockerfile` (kloc-intelligence runtime image — installs core deps only; default `CMD` is `mcp-server-http --host 0.0.0.0 --port 8765`), embedded `docker-compose.yml`, `neo4j.conf`. Top-level `docker-compose.yml` is the canonical one. |
 | `docker-compose.yml` | Neo4j 5 community + Qdrant v1.12.1 with named volumes, plus an opt-in `mcp-server` service (`profiles: ["mcp"]`) that runs the Streamable HTTP MCP daemon. Bring up DBs only with `docker compose up -d`; bring up the daemon too with `docker compose --profile mcp up -d`. |
 | `.github/workflows/ci.yml` | CI: lint + format + mypy + pytest. Neo4j and Qdrant come up as service containers. |
 
